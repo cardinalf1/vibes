@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Default Supabase project for Isha Vibes
+const DEFAULT_URL = 'https://vtgjsdysbmpiipufdyxm.supabase.co';
+
 // Retrieve credentials from Vite env or runtime localStorage override
 const envUrl = (import.meta.env.VITE_SUPABASE_URL as string) || '';
 const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '';
@@ -7,7 +10,7 @@ const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '';
 const localUrl = typeof window !== 'undefined' ? localStorage.getItem('vibes_supabase_url') || '' : '';
 const localKey = typeof window !== 'undefined' ? localStorage.getItem('vibes_supabase_anon_key') || '' : '';
 
-export const supabaseUrl = (localUrl || envUrl).trim();
+export const supabaseUrl = (localUrl || envUrl || DEFAULT_URL).trim();
 export const supabaseAnonKey = (localKey || envKey).trim();
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
