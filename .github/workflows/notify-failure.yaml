@@ -1,0 +1,22 @@
+name: Supabase Branch Status
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+    branches:
+      - main
+    paths:
+      - 'supabase/**'
+
+jobs:
+  check-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify Migration Files
+        run: |
+          echo "Checking Supabase migrations..."
+          ls -la supabase/migrations/
