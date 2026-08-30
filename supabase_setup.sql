@@ -1,10 +1,19 @@
--- ==========================================
--- ISHA VIBES // SUPABASE DATABASE SETUP SCRIPT
+-- ================================================================
+-- ISHA VIBES // CLEAN DATABASE RESET & SETUP SCRIPT
 -- Project: CARDINAL :: OVERTURE (Isha Vibes Edition)
--- ==========================================
+-- ================================================================
 
--- 1. Create Core Tables
-CREATE TABLE IF NOT EXISTS departments (
+-- 1. Clean up any previous tables & publications safely
+DROP TABLE IF EXISTS account_requests CASCADE;
+DROP TABLE IF EXISTS news_updates CASCADE;
+DROP TABLE IF EXISTS expenditures CASCADE;
+DROP TABLE IF EXISTS nodes CASCADE;
+DROP TABLE IF EXISTS episodes CASCADE;
+DROP TABLE IF EXISTS authorized_users CASCADE;
+DROP TABLE IF EXISTS departments CASCADE;
+
+-- 2. Create Core Tables
+CREATE TABLE departments (
   id TEXT PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,
   color TEXT NOT NULL,
@@ -13,7 +22,7 @@ CREATE TABLE IF NOT EXISTS departments (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS authorized_users (
+CREATE TABLE authorized_users (
   id TEXT PRIMARY KEY,
   username TEXT UNIQUE NOT NULL,
   name TEXT,
@@ -25,7 +34,7 @@ CREATE TABLE IF NOT EXISTS authorized_users (
   is_greenlit BOOLEAN DEFAULT TRUE
 );
 
-CREATE TABLE IF NOT EXISTS episodes (
+CREATE TABLE episodes (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   target_release_date DATE NOT NULL,
@@ -40,7 +49,7 @@ CREATE TABLE IF NOT EXISTS episodes (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS nodes (
+CREATE TABLE nodes (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT,
@@ -56,7 +65,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   assigned_name TEXT
 );
 
-CREATE TABLE IF NOT EXISTS expenditures (
+CREATE TABLE expenditures (
   id TEXT PRIMARY KEY,
   item_name TEXT NOT NULL,
   cost NUMERIC NOT NULL,
@@ -68,7 +77,7 @@ CREATE TABLE IF NOT EXISTS expenditures (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS news_updates (
+CREATE TABLE news_updates (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   content TEXT NOT NULL,
@@ -77,7 +86,7 @@ CREATE TABLE IF NOT EXISTS news_updates (
   category TEXT DEFAULT 'Announcement'
 );
 
-CREATE TABLE IF NOT EXISTS account_requests (
+CREATE TABLE account_requests (
   id TEXT PRIMARY KEY,
   username TEXT UNIQUE NOT NULL,
   notes TEXT,
@@ -85,121 +94,66 @@ CREATE TABLE IF NOT EXISTS account_requests (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Enable Row-Level Security (RLS)
-ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE authorized_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE episodes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE nodes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE expenditures ENABLE ROW LEVEL SECURITY;
-ALTER TABLE news_updates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE account_requests ENABLE ROW LEVEL SECURITY;
+-- 3. Disable Row Level Security (Guarantees instant reads and writes without permission blocks)
+ALTER TABLE departments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE authorized_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE episodes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE nodes DISABLE ROW LEVEL SECURITY;
+ALTER TABLE expenditures DISABLE ROW LEVEL SECURITY;
+ALTER TABLE news_updates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE account_requests DISABLE ROW LEVEL SECURITY;
 
--- 3. Drop existing policies
-DROP POLICY IF EXISTS "Public Read Departments" ON departments;
-DROP POLICY IF EXISTS "Public Write Departments" ON departments;
-DROP POLICY IF EXISTS "Public Insert Departments" ON departments;
-DROP POLICY IF EXISTS "Public Update Departments" ON departments;
-DROP POLICY IF EXISTS "Public Delete Departments" ON departments;
-
-DROP POLICY IF EXISTS "Public Read Authorized" ON authorized_users;
-DROP POLICY IF EXISTS "Public Write Authorized" ON authorized_users;
-DROP POLICY IF EXISTS "Public Insert Authorized" ON authorized_users;
-DROP POLICY IF EXISTS "Public Update Authorized" ON authorized_users;
-DROP POLICY IF EXISTS "Public Delete Authorized" ON authorized_users;
-
-DROP POLICY IF EXISTS "Public Read Episodes" ON episodes;
-DROP POLICY IF EXISTS "Public Write Episodes" ON episodes;
-DROP POLICY IF EXISTS "Public Insert Episodes" ON episodes;
-DROP POLICY IF EXISTS "Public Update Episodes" ON episodes;
-DROP POLICY IF EXISTS "Public Delete Episodes" ON episodes;
-
-DROP POLICY IF EXISTS "Public Read Nodes" ON nodes;
-DROP POLICY IF EXISTS "Public Write Nodes" ON nodes;
-DROP POLICY IF EXISTS "Public Insert Nodes" ON nodes;
-DROP POLICY IF EXISTS "Public Update Nodes" ON nodes;
-DROP POLICY IF EXISTS "Public Delete Nodes" ON nodes;
-
-DROP POLICY IF EXISTS "Public Read Expenditures" ON expenditures;
-DROP POLICY IF EXISTS "Public Write Expenditures" ON expenditures;
-DROP POLICY IF EXISTS "Public Insert Expenditures" ON expenditures;
-DROP POLICY IF EXISTS "Public Update Expenditures" ON expenditures;
-DROP POLICY IF EXISTS "Public Delete Expenditures" ON expenditures;
-
-DROP POLICY IF EXISTS "Public Read News" ON news_updates;
-DROP POLICY IF EXISTS "Public Write News" ON news_updates;
-DROP POLICY IF EXISTS "Public Insert News" ON news_updates;
-DROP POLICY IF EXISTS "Public Update News" ON news_updates;
-DROP POLICY IF EXISTS "Public Delete News" ON news_updates;
-
-DROP POLICY IF EXISTS "Public request inserts" ON account_requests;
-DROP POLICY IF EXISTS "Authenticated request controls" ON account_requests;
-DROP POLICY IF EXISTS "Public Read Requests" ON account_requests;
-DROP POLICY IF EXISTS "Public Insert Requests" ON account_requests;
-DROP POLICY IF EXISTS "Public Update Requests" ON account_requests;
-DROP POLICY IF EXISTS "Public Delete Requests" ON account_requests;
-
--- 4. Create Explicit RLS Policies with WITH CHECK (true)
-CREATE POLICY "Public Read Departments" ON departments FOR SELECT USING (true);
-CREATE POLICY "Public Insert Departments" ON departments FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Update Departments" ON departments FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Public Delete Departments" ON departments FOR DELETE USING (true);
-
-CREATE POLICY "Public Read Authorized" ON authorized_users FOR SELECT USING (true);
-CREATE POLICY "Public Insert Authorized" ON authorized_users FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Update Authorized" ON authorized_users FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Public Delete Authorized" ON authorized_users FOR DELETE USING (true);
-
-CREATE POLICY "Public Read Episodes" ON episodes FOR SELECT USING (true);
-CREATE POLICY "Public Insert Episodes" ON episodes FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Update Episodes" ON episodes FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Public Delete Episodes" ON episodes FOR DELETE USING (true);
-
-CREATE POLICY "Public Read Nodes" ON nodes FOR SELECT USING (true);
-CREATE POLICY "Public Insert Nodes" ON nodes FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Update Nodes" ON nodes FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Public Delete Nodes" ON nodes FOR DELETE USING (true);
-
-CREATE POLICY "Public Read Expenditures" ON expenditures FOR SELECT USING (true);
-CREATE POLICY "Public Insert Expenditures" ON expenditures FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Update Expenditures" ON expenditures FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Public Delete Expenditures" ON expenditures FOR DELETE USING (true);
-
-CREATE POLICY "Public Read News" ON news_updates FOR SELECT USING (true);
-CREATE POLICY "Public Insert News" ON news_updates FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Update News" ON news_updates FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Public Delete News" ON news_updates FOR DELETE USING (true);
-
-CREATE POLICY "Public Read Requests" ON account_requests FOR SELECT USING (true);
-CREATE POLICY "Public Insert Requests" ON account_requests FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Update Requests" ON account_requests FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Public Delete Requests" ON account_requests FOR DELETE USING (true);
-
--- 5. Seed Initial Departments
+-- 4. Seed Initial Departments
 INSERT INTO departments (id, name, color, description)
 VALUES
   ('dept-teacher', 'Teacher', '#c79016', 'Faculty mentors, project supervisors, and educational guides.'),
   ('dept-hosts', 'Hosts', '#883e66', 'Voice talents, interviewers, and student presenters.'),
   ('dept-research', 'Research', '#3e6688', 'Topic investigation, fact-checking, and scriptwriting.'),
   ('dept-editing', 'Editing', '#b45f06', 'Audio mastering, music scoring, and post-production.'),
-  ('dept-admin', 'Admin', '#883712', 'Executive management, publishing schedule, and portal administration.')
-ON CONFLICT (name) DO NOTHING;
+  ('dept-admin', 'Admin', '#883712', 'Executive management, publishing schedule, and portal administration.');
 
--- 6. Seed Lead Administrative & Faculty Accounts
+-- 5. Seed Lead Administrative & Student Accounts
 INSERT INTO authorized_users (id, username, name, role, department, password, notes, is_greenlit)
 VALUES
   ('AUTH-admin', 'admin', 'Lead Admin', 'Admin', 'Admin', 'Cardinal@2026', 'Master Studio Administrator', true),
   ('AUTH-raghav', 'raghav', 'Raghav', 'Admin', 'Admin', 'raghav', 'Admin - Raghav', true),
   ('AUTH-teacher', 'teacher', 'Faculty Mentor', 'Teacher', 'Teacher', 'teacher2026', 'Faculty Supervisor', true),
   ('AUTH-maya', 'maya', 'Maya Patel', 'Member', 'Hosts', 'vibes2026', 'Season 1 Co-Host', true),
-  ('AUTH-aarav', 'aarav', 'Aarav Sharma', 'Member', 'Editing', 'vibes2026', 'Post-Production Lead', true)
-ON CONFLICT (username) DO UPDATE 
-SET password = EXCLUDED.password, role = EXCLUDED.role, department = EXCLUDED.department, is_greenlit = EXCLUDED.is_greenlit;
+  ('AUTH-aarav', 'aarav', 'Aarav Sharma', 'Member', 'Editing', 'vibes2026', 'Post-Production Lead', true);
 
--- 7. Enable Supabase Realtime Replication
-ALTER PUBLICATION supabase_realtime ADD TABLE departments;
-ALTER PUBLICATION supabase_realtime ADD TABLE authorized_users;
-ALTER PUBLICATION supabase_realtime ADD TABLE episodes;
-ALTER PUBLICATION supabase_realtime ADD TABLE nodes;
-ALTER PUBLICATION supabase_realtime ADD TABLE expenditures;
-ALTER PUBLICATION supabase_realtime ADD TABLE news_updates;
-ALTER PUBLICATION supabase_realtime ADD TABLE account_requests;
+-- 6. Seed Initial Podcast Episodes
+INSERT INTO episodes (id, title, target_release_date, status, hosts, guest_name, runtime_minutes, notes)
+VALUES
+  ('EP-01', 'Ep 01 // The Kickoff: Why Student Voices Matter', '2026-09-15', 'Recording', 'Maya & Aarav', 'Principal Sharma', 28, 'Pilot episode covering campus innovations and student stories.'),
+  ('EP-02', 'Ep 02 // Engineering the Future: F1, AI & Code', '2026-09-22', 'Scripting', 'Maya Patel', 'Dr. Alok Verma', 35, 'Deep dive into youth STEM competitions, robotics, and creative coding.'),
+  ('EP-03', 'Ep 03 // Art, Acoustics & Sonic Spaces', '2026-09-29', 'Idea', 'Aarav Sharma', 'Studio Sound Engineer', 30, 'Behind-the-scenes of studio acoustic mastering and sound design.');
+
+-- 7. Seed Initial Production Tasks (Gantt Milestones)
+INSERT INTO nodes (id, title, description, department, status, priority, planned_start, planned_end)
+VALUES
+  ('TSK-101', 'Season 1 Curriculum & Episode Themes', 'Lock in 6 episode topics and guest invites with faculty mentor.', 'Teacher', 'Completed', 'High', '2026-09-01', '2026-09-05'),
+  ('TSK-102', 'Studio B Acoustic Soundproofing Setup', 'Install acoustic foam diffusers and position vocal shield mics.', 'Editing', 'Completed', 'Critical', '2026-09-03', '2026-09-08'),
+  ('TSK-103', 'Episode 01 Research & Talking Points Outline', 'Draft 5 primary interview question clusters and fact checks.', 'Research', 'In Progress', 'High', '2026-09-06', '2026-09-11'),
+  ('TSK-104', 'Episode 01 Dry Run & Mic Testing', 'Dry-run voice levels and multitrack interface gain staging.', 'Hosts', 'To Do', 'Medium', '2026-09-10', '2026-09-13'),
+  ('TSK-105', 'Episode 01 Live Recording Session', 'Studio recording session with faculty guest.', 'Hosts', 'To Do', 'Critical', '2026-09-14', '2026-09-15'),
+  ('TSK-106', 'Episode 01 Audio Post-Production & Mixing', 'Noise removal, compression, EQ, theme music intro/outro.', 'Editing', 'To Do', 'High', '2026-09-16', '2026-09-19'),
+  ('TSK-107', 'Faculty Review & Publishing Distribution', 'Final review by faculty mentor and release to broadcast channels.', 'Admin', 'To Do', 'Critical', '2026-09-20', '2026-09-22');
+
+-- 8. Seed Initial Studio Budget Items
+INSERT INTO expenditures (id, item_name, cost, category, needed_by, status)
+VALUES
+  ('EXP-101', 'Shure SM7B Dynamic Vocal Microphone (2x Units)', 72000, 'Equipment', '2026-09-10', 'Purchased'),
+  ('EXP-102', 'Focusrite Scarlett 4i4 USB Audio Interface', 21500, 'Equipment', '2026-09-12', 'Purchased'),
+  ('EXP-103', 'Acoustic Foam Soundproofing Panels (Studio B)', 14500, 'Studio & Acoustic', '2026-09-15', 'Purchased'),
+  ('EXP-104', 'Descript & Adobe Audition Annual Education Licences', 18000, 'Software & Subscriptions', '2026-09-20', 'Pending');
+
+-- 9. Realtime Publication Setup (Safe block)
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE departments, authorized_users, episodes, nodes, expenditures, news_updates, account_requests;
+  EXCEPTION
+    WHEN duplicate_object THEN NULL;
+    WHEN others THEN NULL;
+  END;
+END $$;
