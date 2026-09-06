@@ -1,6 +1,6 @@
 import { 
   LayoutDashboard, Radio, Settings, LogOut, Users, ListTodo, 
-  ShieldCheck, Lock, Wallet, Sparkles, Mic, BookOpen, Key
+  ShieldCheck, Wallet, Mic, Key
 } from 'lucide-react';
 import { useAuth } from './AuthGate';
 
@@ -23,7 +23,7 @@ export function Header({
   onOpenChangePassword,
   isSupabaseActive 
 }: HeaderProps) {
-  const { user, signOut, role: authRole, name: displayName, username, setIsLoggingIn } = useAuth();
+  const { user, signOut, role: authRole, name: displayName, username } = useAuth();
 
   const isTeacherOrAdmin = authRole === 'Admin' || authRole === 'Teacher';
 
@@ -96,7 +96,7 @@ export function Header({
 
       {/* Right Controls: User Pill, Password Change, Settings, Logout */}
       <div className="flex items-center gap-3">
-        {user ? (
+        {user && (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2.5 bg-[#121620] border border-[#222b3d] px-3 py-1.5 rounded-xl">
               <div className="w-6 h-6 rounded-lg bg-[#181e2b] border border-[#2d384e] flex items-center justify-center text-[10px] font-bold text-slate-200 uppercase">
@@ -112,7 +112,7 @@ export function Header({
               </div>
             </div>
 
-            {/* Self-service password change button for any logged in user */}
+            {/* Self-service password change button */}
             <button
               onClick={onOpenChangePassword}
               title="Change My Password"
@@ -121,7 +121,7 @@ export function Header({
               <Key className="w-3.5 h-3.5" />
             </button>
           </div>
-        ) : null}
+        )}
 
         {isTeacherOrAdmin && (
           <button 
@@ -133,28 +133,18 @@ export function Header({
           </button>
         )}
 
-        {authRole === 'Guest' || !user ? (
-          <button 
-            onClick={() => setIsLoggingIn && setIsLoggingIn(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#c79016] hover:bg-[#d89e1a] text-black font-medium rounded-xl text-xs transition-all shadow-md font-semibold cursor-pointer"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>STUDENT LOGIN</span>
-          </button>
-        ) : (
-          <button 
-            onClick={() => {
-              if (confirm('Sign out from Isha Vibes workspace?')) {
-                signOut();
-              }
-            }} 
-            title="Sign Out" 
-            className="flex items-center gap-1.5 text-slate-400 hover:text-red-400 bg-[#121620] hover:bg-[#181e2b] border border-[#222b3d] px-3 py-1.5 rounded-xl text-xs transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">SIGN OUT</span>
-          </button>
-        )}
+        <button 
+          onClick={() => {
+            if (confirm('Sign out from Isha Vibes workspace?')) {
+              signOut();
+            }
+          }} 
+          title="Sign Out" 
+          className="flex items-center gap-1.5 text-slate-400 hover:text-red-400 bg-[#121620] hover:bg-[#181e2b] border border-[#222b3d] px-3 py-1.5 rounded-xl text-xs transition-colors cursor-pointer"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">SIGN OUT</span>
+        </button>
       </div>
     </header>
   );

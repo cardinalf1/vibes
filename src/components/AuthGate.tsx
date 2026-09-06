@@ -1,8 +1,8 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, User, AlertCircle, CheckCircle2, ArrowRight, Mic, Radio, Key } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { AuthorizedUser } from '../types';
+import { Lock, User, AlertCircle, CheckCircle2, ArrowRight, Radio, Sparkles, Send, Users, Shield } from 'lucide-react';
+import { supabase, isSupabaseConfigured, supabaseUrl } from '../lib/supabase';
+import { supabaseService } from '../lib/supabaseService';
 
 interface AuthGateProps {
   children: React.ReactNode;
@@ -12,24 +12,20 @@ interface AuthContextType {
   user: any;
   signOut: () => Promise<void>;
   isSupabaseActive: boolean;
-  role: 'Admin' | 'Teacher' | 'Member' | 'Guest' | string;
+  role: 'Admin' | 'Teacher' | 'Member' | string;
   name: string;
   username: string;
   department: string;
-  isLoggingIn: boolean;
-  setIsLoggingIn: (val: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   signOut: async () => {},
   isSupabaseActive: false,
-  role: 'Guest',
-  name: 'Guest Reader',
-  username: 'guest',
-  department: 'General',
-  isLoggingIn: false,
-  setIsLoggingIn: () => {}
+  role: 'Member',
+  name: '',
+  username: '',
+  department: 'Research'
 });
 
 export function useAuth() {
@@ -38,33 +34,39 @@ export function useAuth() {
 
 export function AuthGate({ children }: AuthGateProps) {
   const [user, setUser] = useState<any>(() => {
-    const savedCustomSession = localStorage.getItem('vibes_custom_session');
-    if (savedCustomSession) {
+    const saved = localStorage.getItem('vibes_custom_session');
+    if (saved) {
       try {
-        return JSON.parse(savedCustomSession);
+        return JSON.parse(saved);
       } catch (e) {
         return null;
       }
     }
     return null;
   });
+
   const [loading, setLoading] = useState(true);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [activeTab, setActiveTab] = useState<'login' | 'request'>('login');
   
+  // Login form state
   const [usernameInput, setUsernameInput] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
-  const [bypassAuth, setBypassAuth] = useState(false);
+
+  // Request access state
+  const [reqUsername, setReqUsername] = useState('');
+  const [reqName, setReqName] = useState('');
+  const [reqDept, setReqDept] = useState('Hosts');
+  const [reqNotes, setReqNotes] = useState('');
+  const [reqLoading, setReqLoading] = useState(false);
 
   useEffect(() => {
-    const savedCustomSession = localStorage.getItem('vibes_custom_session');
-    if (savedCustomSession) {
+    const saved = localStorage.getItem('vibes_custom_session');
+    if (saved) {
       try {
-        setUser(JSON.parse(savedCustomSession));
-        setLoading(false);
-        return;
+        setUser(JSON.parse(saved));
       } catch (e) {
         localStorage.removeItem('vibes_custom_session');
       }
@@ -72,7 +74,7 @@ export function AuthGate({ children }: AuthGateProps) {
     setLoading(false);
   }, []);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
@@ -82,58 +84,54 @@ export function AuthGate({ children }: AuthGateProps) {
       const cleanUsername = usernameInput.toLowerCase().trim();
 
       if (!isSupabaseConfigured || !supabase) {
-        // Offline development fallback
-        setTimeout(() => {
-          let mockRole = 'Member';
-          let mockName = cleanUsername;
-          let mockDept = 'Research';
-          
-          if (cleanUsername === 'admin' || cleanUsername === 'raghav' || cleanUsername === 'contact') {
-            mockRole = 'Admin';
-            mockDept = 'Admin';
-            mockName = cleanUsername === 'raghav' ? 'Raghav' : 'Project Admin';
-          } else if (cleanUsername === 'teacher') {
-            mockRole = 'Teacher';
-            mockDept = 'Teacher';
-            mockName = 'Faculty Mentor';
-          } else if (cleanUsername === 'maya') {
-            mockRole = 'Member';
-            mockDept = 'Hosts';
-            mockName = 'Maya Patel';
-          } else if (cleanUsername === 'aarav') {
-            mockRole = 'Member';
-            mockDept = 'Editing';
-            mockName = 'Aarav Sharma';
-          }
+        // Local offline fallback
+        let mockRole = 'Member';
+        let mockName = cleanUsername;
+        let mockDept = 'Research';
+        
+        if (cleanUsername === 'admin' || cleanUsername === 'raghav') {
+          mockRole = 'Admin';
+          mockDept = 'Admin';
+          mockName = cleanUsername === 'raghav' ? 'Raghav' : 'Studio Administrator';
+        } else if (cleanUsername === 'teacher') {
+          mockRole = 'Teacher';
+          mockDept = 'Teacher';
+          mockName = 'Faculty Mentor';
+        } else if (cleanUsername === 'maya') {
+          mockRole = 'Member';
+          mockDept = 'Hosts';
+          mockName = 'Maya Patel';
+        } else if (cleanUsername === 'aarav') {
+          mockRole = 'Member';
+          mockDept = 'Editing';
+          mockName = 'Aarav Sharma';
+        }
 
-          const customSession = {
-            id: `usr-${cleanUsername}`,
-            username: cleanUsername,
-            role: mockRole,
-            name: mockName,
-            department: mockDept,
-            isCustom: true
-          };
-          localStorage.setItem('vibes_custom_session', JSON.stringify(customSession));
-          setUser(customSession);
-          setFormLoading(false);
-          setIsLoggingIn(false);
-        }, 400);
+        const session = {
+          id: `usr-${cleanUsername}`,
+          username: cleanUsername,
+          role: mockRole,
+          name: mockName,
+          department: mockDept,
+          isCustom: true
+        };
+        localStorage.setItem('vibes_custom_session', JSON.stringify(session));
+        setUser(session);
         return;
       }
 
-      // Username + Password authentication against authorized_users table
+      // Query Supabase directly for authorized user
       const { data: authUsers, error: fetchErr } = await supabase
         .from('authorized_users')
         .select('*')
         .eq('username', cleanUsername);
 
       if (fetchErr) {
-        throw new Error('Database connection error. Please try again.');
+        throw new Error(`Database error: ${fetchErr.message}`);
       }
 
       if (!authUsers || authUsers.length === 0) {
-        throw new Error(`ACCESS DENIED: Username "${cleanUsername}" is not registered. Please contact a Faculty Lead or Admin.`);
+        throw new Error(`Account "@${cleanUsername}" not found. Please click "Request Access" to register.`);
       }
 
       const matchedUser = authUsers[0];
@@ -143,7 +141,7 @@ export function AuthGate({ children }: AuthGateProps) {
       }
 
       if (matchedUser.is_greenlit === false) {
-        throw new Error('ACCESS DENIED: Your account is currently dormant. Awaiting greenlight by Faculty / Admin.');
+        throw new Error('Account dormant: Awaiting faculty or admin approval.');
       }
 
       const customSession = {
@@ -157,21 +155,53 @@ export function AuthGate({ children }: AuthGateProps) {
 
       localStorage.setItem('vibes_custom_session', JSON.stringify(customSession));
       setUser(customSession);
-      setIsLoggingIn(false);
     } catch (err: any) {
-      setErrorMsg(err.message || 'An error occurred during authentication.');
+      setErrorMsg(err.message || 'Authentication error.');
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleRequestAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setInfoMsg(null);
+    setReqLoading(true);
+
+    try {
+      const cleanUsername = reqUsername.toLowerCase().trim();
+      const combinedNotes = `Name: ${reqName.trim()} | Dept: ${reqDept} | Note: ${reqNotes.trim()}`;
+      
+      await supabaseService.createAccountRequest(cleanUsername, combinedNotes);
+      
+      setInfoMsg(`Registration submitted for @${cleanUsername}! A lead admin or teacher will review and approve your account.`);
+      setReqUsername('');
+      setReqName('');
+      setReqNotes('');
+      setTimeout(() => {
+        setActiveTab('login');
+        setUsernameInput(cleanUsername);
+      }, 2500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to submit account request.');
+    } finally {
+      setReqLoading(false);
     }
   };
 
   const handleSignOut = async () => {
     localStorage.removeItem('vibes_custom_session');
     setUser(null);
-    setBypassAuth(false);
-    setIsLoggingIn(false);
     setUsernameInput('');
     setPassword('');
+    setErrorMsg(null);
+    setInfoMsg(null);
+  };
+
+  const quickFill = (u: string, p: string) => {
+    setUsernameInput(u);
+    setPassword(p);
+    setErrorMsg(null);
   };
 
   if (loading) {
@@ -189,134 +219,271 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  const userRole = user?.role || (user ? 'Member' : 'Guest');
-  const userName = user?.name || user?.username || 'Guest Contributor';
-  const userUsername = user?.username || 'guest';
-  const userDept = user?.department || 'General';
-
-  if (bypassAuth || user || !isLoggingIn) {
+  // If user is authenticated, render the main application
+  if (user) {
     return (
       <AuthContext.Provider value={{ 
         user, 
         signOut: handleSignOut, 
-        isSupabaseActive: isSupabaseConfigured && !bypassAuth,
-        role: bypassAuth ? 'Admin' : userRole,
-        name: bypassAuth ? 'Studio Lead (Dev)' : userName,
-        username: userUsername,
-        department: userDept,
-        isLoggingIn,
-        setIsLoggingIn
+        isSupabaseActive: isSupabaseConfigured,
+        role: user.role || 'Member',
+        name: user.name || user.username,
+        username: user.username,
+        department: user.department || 'Research'
       }}>
         {children}
       </AuthContext.Provider>
     );
   }
 
+  // Otherwise, render the dedicated Login & Access Gate
   return (
-    <div className="relative min-h-screen bg-[#0b0e14] flex items-center justify-center px-4 overflow-hidden selection:bg-[#3e6688]/40 selection:text-white font-sans">
+    <div className="relative min-h-screen bg-[#0b0e14] flex flex-col items-center justify-center px-4 overflow-hidden selection:bg-[#3e6688]/40 selection:text-white font-sans">
+      {/* Background ambient gradient glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[550px] h-[550px] bg-gradient-to-br from-[#3e6688]/15 via-[#883e66]/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+
       <motion.div 
-        initial={{ opacity: 0, y: 15 }}
+        initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="relative w-full max-w-md bg-[#121620] border border-[#222b3d] rounded-3xl shadow-2xl overflow-hidden"
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+        className="relative w-full max-w-md bg-[#121620]/95 backdrop-blur-xl border border-[#222b3d] rounded-3xl shadow-2xl overflow-hidden z-10"
       >
-        {/* Top Header */}
+        {/* Header Branding */}
         <div className="p-6 text-center border-b border-[#222b3d] bg-gradient-to-b from-[#181e2b] to-[#121620]">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#3e6688] to-[#883e66] flex items-center justify-center text-white mx-auto shadow-md mb-3">
-            <Mic className="w-6 h-6" />
+          <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-[#3e6688] to-[#883e66] flex items-center justify-center text-white mx-auto shadow-lg shadow-[#3e6688]/20 mb-3">
+            <Radio className="w-6 h-6" />
           </div>
-          <h1 className="text-lg font-bold text-white font-sans tracking-wide">
-            CARDINAL :: OVERTURE
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <span className="font-mono text-xs font-bold tracking-wider text-white">CARDINAL :: OVERTURE</span>
+            <span className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#883e66]/25 border border-[#883e66]/50 text-[#f472b6]">
+              ISHA VIBES
+            </span>
+          </div>
+          <h1 className="text-base font-bold text-slate-100">
+            Student Podcast Studio Portal
           </h1>
-          <span className="text-[10px] font-mono text-[#f472b6] tracking-widest uppercase block mt-0.5">
-            ISHA VIBES STUDENT PODCAST PORTAL
-          </span>
+          <p className="text-[11px] text-slate-400 mt-1">
+            Sign in to access episode schedules, audio tracks, and production tasks.
+          </p>
         </div>
 
-        <div className="p-7">
+        {/* Tab Toggle: Sign In vs Request Access */}
+        <div className="flex border-b border-[#222b3d] bg-[#0e121a]/80 p-1.5 gap-1.5">
+          <button
+            type="button"
+            onClick={() => { setActiveTab('login'); setErrorMsg(null); setInfoMsg(null); }}
+            className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+              activeTab === 'login'
+                ? 'bg-[#3e6688] text-white shadow-md shadow-[#3e6688]/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+            }`}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('request'); setErrorMsg(null); setInfoMsg(null); }}
+            className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+              activeTab === 'request'
+                ? 'bg-[#883e66] text-white shadow-md shadow-[#883e66]/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+            }`}
+          >
+            Request Access
+          </button>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="p-6">
           <AnimatePresence mode="wait">
-            <form onSubmit={handleAuth} className="space-y-4">
-              {errorMsg && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="bg-red-950/30 border border-red-800/40 rounded-xl p-3.5 flex gap-2.5 items-start"
-                >
-                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <div className="text-xs text-red-200 leading-relaxed font-sans">
-                    {errorMsg}
-                  </div>
-                </motion.div>
-              )}
+            {errorMsg && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-red-950/30 border border-red-800/40 rounded-xl p-3 mb-4 flex gap-2.5 items-start"
+              >
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-red-200 leading-relaxed">
+                  {errorMsg}
+                </div>
+              </motion.div>
+            )}
 
-              {infoMsg && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="bg-emerald-950/30 border border-emerald-800/40 rounded-xl p-3.5 flex gap-2.5 items-start"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div className="text-xs text-emerald-200 leading-relaxed font-sans">
-                    {infoMsg}
-                  </div>
-                </motion.div>
-              )}
+            {infoMsg && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-emerald-950/30 border border-emerald-800/40 rounded-xl p-3 mb-4 flex gap-2.5 items-start"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-emerald-200 leading-relaxed">
+                  {infoMsg}
+                </div>
+              </motion.div>
+            )}
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 block">Username</label>
-                <div className="relative">
-                  <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+            {activeTab === 'login' ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300 block">Username</label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      placeholder="e.g. raghav, teacher, maya"
+                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-[#3e6688] transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300 block">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                    <input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-[#3e6688] transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={formLoading}
+                  className="w-full h-11 mt-2 bg-[#3e6688] hover:bg-[#4d7ca6] text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-[#3e6688]/20 cursor-pointer disabled:opacity-50"
+                >
+                  {formLoading ? 'Authenticating...' : (
+                    <>
+                      <span>SIGN IN TO ISHA VIBES</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+
+                {/* Quick login chips for testing / quick access */}
+                <div className="pt-3 border-t border-[#222b3d]/60">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-mono block mb-2">
+                    Quick Logins (Click to autofill):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => quickFill('raghav', 'raghav')}
+                      className="px-2.5 py-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] rounded-lg text-[11px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
+                    >
+                      @raghav (Admin)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => quickFill('teacher', 'teacher2026')}
+                      className="px-2.5 py-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] rounded-lg text-[11px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
+                    >
+                      @teacher (Faculty)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => quickFill('maya', 'vibes2026')}
+                      className="px-2.5 py-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] rounded-lg text-[11px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
+                    >
+                      @maya (Host)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => quickFill('aarav', 'vibes2026')}
+                      className="px-2.5 py-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] rounded-lg text-[11px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
+                    >
+                      @aarav (Editor)
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleRequestAccess} className="space-y-3.5">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-300 block">Desired Username</label>
                   <input
                     type="text"
                     required
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    placeholder="e.g. raghav, teacher, maya"
-                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#3e6688] transition-colors"
+                    value={reqUsername}
+                    onChange={(e) => setReqUsername(e.target.value)}
+                    placeholder="e.g. samyak, priya"
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-[#883e66] transition-colors"
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 block">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-300 block">Full Name</label>
                   <input
-                    type="password"
+                    type="text"
                     required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#3e6688] transition-colors"
+                    value={reqName}
+                    onChange={(e) => setReqName(e.target.value)}
+                    placeholder="e.g. Samyak Jain"
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-[#883e66] transition-colors"
                   />
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={formLoading}
-                className="w-full h-11 mt-2 bg-[#3e6688] hover:bg-[#4d7ca6] text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
-              >
-                {formLoading ? 'Authenticating...' : (
-                  <>
-                    <span>ENTER STUDIO</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-300 block">Department Interest</label>
+                  <select
+                    value={reqDept}
+                    onChange={(e) => setReqDept(e.target.value)}
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#883e66] transition-colors"
+                  >
+                    <option value="Hosts">Hosts / Anchors</option>
+                    <option value="Research">Research & Scripting</option>
+                    <option value="Editing">Audio Editing & Mastering</option>
+                    <option value="Teacher">Faculty / Mentor</option>
+                    <option value="Admin">Studio Admin</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-300 block">Brief Note / Role details</label>
+                  <textarea
+                    rows={2}
+                    value={reqNotes}
+                    onChange={(e) => setReqNotes(e.target.value)}
+                    placeholder="I want to join the podcast editing team..."
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-[#883e66] transition-colors resize-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={reqLoading}
+                  className="w-full h-10 mt-1 bg-[#883e66] hover:bg-[#a14b7a] text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-[#883e66]/20 cursor-pointer disabled:opacity-50"
+                >
+                  {reqLoading ? 'Submitting...' : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>SUBMIT ACCESS REQUEST</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
           </AnimatePresence>
         </div>
 
-        <div className="p-4 border-t border-[#222b3d] bg-[#0e121a] flex flex-col gap-2">
-          <button
-            onClick={() => setIsLoggingIn(false)}
-            className="w-full py-2 text-xs text-slate-400 hover:text-white bg-[#181e2b] hover:bg-[#20283a] border border-[#222b3d] rounded-xl transition-all cursor-pointer font-sans"
-          >
-            ← Cancel & Return to Overview
-          </button>
+        {/* Footer info: Supabase cloud status */}
+        <div className="p-3.5 border-t border-[#222b3d] bg-[#0e121a] flex items-center justify-between text-[11px] text-slate-500 font-mono">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>SUPABASE LIVE</span>
+          </div>
+          <span className="text-[10px] text-slate-500 truncate max-w-[200px]">
+            vtgjsdysbmpiipufdyxm.supabase.co
+          </span>
         </div>
       </motion.div>
     </div>

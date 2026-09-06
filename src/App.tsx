@@ -149,9 +149,15 @@ const defaultAuthorizedUsers: AuthorizedUser[] = [
 ];
 
 export default function App() {
-  const { isSupabaseActive, role: authRole, user, name: authName, username: authUsername, signOut, setIsLoggingIn } = useAuth();
+  const { isSupabaseActive, role: authRole, user, name: authName, username: authUsername, signOut } = useAuth();
   const isAdmin = authRole === 'Admin' || authRole === 'Teacher';
-  const [currentRole, setCurrentRole] = useState<string>('Teacher');
+  const [currentRole, setCurrentRole] = useState<string>(authRole || 'Admin');
+
+  useEffect(() => {
+    if (authRole) {
+      setCurrentRole(authRole);
+    }
+  }, [authRole]);
 
   const userRef = useRef(user);
   useEffect(() => {
@@ -533,124 +539,108 @@ export default function App() {
       />
 
       <main className="flex-1 overflow-hidden p-4 sm:p-6 bg-gradient-to-b from-[#0b0e14] via-[#0e121a] to-[#0b0e14]">
-        {/* Guest View: Public Welcome & Join Portal */}
-        {authRole === 'Guest' && activeModule === 'Command Center' ? (
-          <div className="h-full overflow-y-auto">
-            <PublicWelcome
+        {/* 1. Command Center */}
+        {activeModule === 'Command Center' && (
+          <div className="flex flex-col h-full gap-4">
+            <TopStats
+              activeEpisode={activeEpisode}
               nodes={nodes}
               departments={departments}
-              expenditures={expenditures}
-              simulatedDate={simulatedDate}
-              onRequestAccount={handleRequestAccount}
-              onOpenLogin={() => setIsLoggingIn && setIsLoggingIn(true)}
+              memberCount={authorizedUsers.length}
+            />
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
+              <div className="lg:col-span-2 h-full min-h-0">
+                <GanttChart 
+                  nodes={nodes} 
+                  departments={departments}
+                  simulatedDate={simulatedDate} 
+                />
+              </div>
+              <div className="h-full min-h-0">
+                <NodeList
+                  nodes={nodes}
+                  currentRole={currentRole}
+                  onUpdateStatus={handleUpdateStatus}
+                  onDeleteNode={handleDeleteNode}
+                  onOpenCreateModal={() => setIsModalOpen(true)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2. Episode Production Ledger */}
+        {activeModule === 'Episodes' && (
+          <div className="h-full">
+            <EpisodeHub
+              episodes={episodes}
+              setEpisodes={setEpisodes}
+              currentRole={currentRole}
             />
           </div>
-        ) : (
-          <>
-            {/* 1. Command Center */}
-            {activeModule === 'Command Center' && (
-              <div className="flex flex-col h-full gap-4">
-                <TopStats
-                  activeEpisode={activeEpisode}
-                  nodes={nodes}
-                  departments={departments}
-                  memberCount={authorizedUsers.length}
-                />
-                <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
-                  <div className="lg:col-span-2 h-full min-h-0">
-                    <GanttChart 
-                      nodes={nodes} 
-                      departments={departments}
-                      simulatedDate={simulatedDate} 
-                    />
-                  </div>
-                  <div className="h-full min-h-0">
-                    <NodeList
-                      nodes={nodes}
-                      currentRole={currentRole}
-                      onUpdateStatus={handleUpdateStatus}
-                      onDeleteNode={handleDeleteNode}
-                      onOpenCreateModal={() => setIsModalOpen(true)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+        )}
 
-            {/* 2. Episode Production Ledger */}
-            {activeModule === 'Episodes' && (
-              <div className="h-full">
-                <EpisodeHub
-                  episodes={episodes}
-                  setEpisodes={setEpisodes}
-                  currentRole={currentRole}
-                />
-              </div>
-            )}
+        {/* 3. Departments & Member Roster */}
+        {activeModule === 'Departments & Roster' && (
+          <div className="h-full">
+            <DepartmentManager
+              departments={departments}
+              users={authorizedUsers}
+              onAddDepartment={handleAddDepartment}
+              onUpdateDepartment={handleUpdateDepartment}
+              onDeleteDepartment={handleDeleteDepartment}
+              onAddUser={handleAddAuthorizedUser}
+              onUpdateUser={handleUpdateAuthorizedUser}
+              onDeleteUser={handleDeleteAuthorizedUser}
+              currentRole={authRole}
+            />
+          </div>
+        )}
 
-            {/* 3. Departments & Member Roster */}
-            {activeModule === 'Departments & Roster' && (
-              <div className="h-full">
-                <DepartmentManager
-                  departments={departments}
-                  users={authorizedUsers}
-                  onAddDepartment={handleAddDepartment}
-                  onUpdateDepartment={handleUpdateDepartment}
-                  onDeleteDepartment={handleDeleteDepartment}
-                  onAddUser={handleAddAuthorizedUser}
-                  onUpdateUser={handleUpdateAuthorizedUser}
-                  onDeleteUser={handleDeleteAuthorizedUser}
-                  currentRole={authRole}
-                />
-              </div>
-            )}
+        {/* 4. Action Items & To-Dos */}
+        {activeModule === 'To-Dos' && (
+          <div className="h-full overflow-y-auto">
+            <TeamTodos
+              nodes={nodes}
+              authorizedUsers={authorizedUsers}
+              departments={departments}
+              currentRole={currentRole}
+              onAddTodo={(todo) => handleCreateNode({ ...todo, priority: 'Medium' })}
+              onUpdateStatus={handleUpdateStatus}
+              onDeleteTodo={handleDeleteNode}
+              onAssignTodo={handleAssignTodo}
+              onEditTodo={handleEditTodo}
+              isAdmin={isAdmin}
+            />
+          </div>
+        )}
 
-            {/* 4. Action Items & To-Dos */}
-            {activeModule === 'To-Dos' && (
-              <div className="h-full overflow-y-auto">
-                <TeamTodos
-                  nodes={nodes}
-                  authorizedUsers={authorizedUsers}
-                  departments={departments}
-                  currentRole={currentRole}
-                  onAddTodo={(todo) => handleCreateNode({ ...todo, priority: 'Medium' })}
-                  onUpdateStatus={handleUpdateStatus}
-                  onDeleteTodo={handleDeleteNode}
-                  onAssignTodo={handleAssignTodo}
-                  onEditTodo={handleEditTodo}
-                  isAdmin={isAdmin}
-                />
-              </div>
-            )}
+        {/* 5. Budget & Studio Costs */}
+        {activeModule === 'Budget & Studio' && (
+          <div className="h-full">
+            <BudgetLedger
+              expenditures={expenditures}
+              onAddExpenditure={handleAddExpenditure}
+              onDeleteExpenditure={handleDeleteExpenditure}
+              onUpdateStatus={handleUpdateExpenditureStatus}
+              isAdmin={isAdmin}
+            />
+          </div>
+        )}
 
-            {/* 5. Budget & Studio Costs */}
-            {activeModule === 'Budget & Studio' && (
-              <div className="h-full">
-                <BudgetLedger
-                  expenditures={expenditures}
-                  onAddExpenditure={handleAddExpenditure}
-                  onDeleteExpenditure={handleDeleteExpenditure}
-                  onUpdateStatus={handleUpdateExpenditureStatus}
-                  isAdmin={isAdmin}
-                />
-              </div>
-            )}
-
-            {/* 6. Access Control Panel */}
-            {activeModule === 'Access Control' && isAdmin && (
-              <div className="h-full">
-                <AccessControlPanel
-                  authorizedUsers={authorizedUsers}
-                  onAddAuthorizedUser={handleAddAuthorizedUser}
-                  onDeleteAuthorizedUser={handleDeleteAuthorizedUser}
-                  onUpdateAuthorizedUser={handleUpdateAuthorizedUser}
-                  accountRequests={accountRequests}
-                  onDeleteAccountRequest={handleDeleteAccountRequest}
-                  departments={departments}
-                />
-              </div>
-            )}
-          </>
+        {/* 6. Access Control Panel */}
+        {activeModule === 'Access Control' && isAdmin && (
+          <div className="h-full">
+            <AccessControlPanel
+              authorizedUsers={authorizedUsers}
+              onAddAuthorizedUser={handleAddAuthorizedUser}
+              onDeleteAuthorizedUser={handleDeleteAuthorizedUser}
+              onUpdateAuthorizedUser={handleUpdateAuthorizedUser}
+              accountRequests={accountRequests}
+              onDeleteAccountRequest={handleDeleteAccountRequest}
+              departments={departments}
+            />
+          </div>
         )}
       </main>
 
