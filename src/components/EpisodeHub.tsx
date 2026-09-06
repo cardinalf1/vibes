@@ -11,6 +11,7 @@ interface EpisodeHubProps {
   onAddEpisode: (ep: Omit<Episode, 'id' | 'created_at'>) => void;
   onEditEpisode: (id: string, updatedEp: Episode) => void;
   onDeleteEpisode: (id: string) => void;
+  onUpdateEpisodeStatus: (id: string, status: EpisodeStatus) => void;
   currentRole: string;
 }
 
@@ -28,6 +29,7 @@ export function EpisodeHub({
   onAddEpisode,
   onEditEpisode,
   onDeleteEpisode,
+  onUpdateEpisodeStatus,
   currentRole 
 }: EpisodeHubProps) {
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
@@ -257,16 +259,27 @@ export function EpisodeHub({
                     <span className="text-xs font-mono font-bold text-[#f472b6] tracking-wider px-2 py-0.5 rounded-md bg-[#883e66]/20 border border-[#883e66]/40">
                       {ep.id}
                     </span>
-                    <span 
-                      className="text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full font-semibold border"
+                    <select
+                      value={ep.status}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        onUpdateEpisodeStatus(ep.id, e.target.value as EpisodeStatus);
+                      }}
+                      className="text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full font-semibold border outline-none cursor-pointer"
                       style={{
                         backgroundColor: stConf.bg,
-                        borderColor: `${stConf.color}40`,
+                        borderColor: `${stConf.color}60`,
                         color: stConf.color
                       }}
                     >
-                      {stConf.label}
-                    </span>
+                      <option value="Idea" className="bg-[#121620] text-slate-200">Idea & Concept</option>
+                      <option value="Scripting" className="bg-[#121620] text-slate-200">Scripting</option>
+                      <option value="Recording" className="bg-[#121620] text-slate-200">Studio Recording</option>
+                      <option value="Editing" className="bg-[#121620] text-slate-200">Audio Mix & Editing</option>
+                      <option value="Review" className="bg-[#121620] text-slate-200">Faculty Review</option>
+                      <option value="Published" className="bg-[#121620] text-slate-200">Published & Live</option>
+                    </select>
                   </div>
 
                   <h3 className="text-base font-bold text-white font-sans group-hover:text-[#9dbcd4] transition-colors line-clamp-2">

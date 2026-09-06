@@ -465,6 +465,13 @@ export default function App() {
     supabaseService.upsertEpisode(updatedEp).catch(console.error);
   };
 
+  const handleUpdateEpisodeStatus = (id: string, status: EpisodeStatus) => {
+    const updated = episodes.map(e => e.id === id ? { ...e, status } : e);
+    setEpisodes(updated);
+    const item = updated.find(e => e.id === id);
+    if (item) supabaseService.upsertEpisode(item).catch(console.error);
+  };
+
   const handleDeleteEpisode = (id: string) => {
     setEpisodes(prev => prev.filter(e => e.id !== id));
     supabaseService.deleteEpisode(id).catch(console.error);
@@ -617,6 +624,7 @@ export default function App() {
               onAddEpisode={handleCreateEpisode}
               onEditEpisode={handleEditEpisode}
               onDeleteEpisode={handleDeleteEpisode}
+              onUpdateEpisodeStatus={handleUpdateEpisodeStatus}
               currentRole={currentRole}
             />
           </div>
