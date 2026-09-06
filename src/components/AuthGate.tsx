@@ -84,40 +84,7 @@ export function AuthGate({ children }: AuthGateProps) {
       const cleanUsername = usernameInput.toLowerCase().trim();
 
       if (!isSupabaseConfigured || !supabase) {
-        // Local offline fallback
-        let mockRole = 'Member';
-        let mockName = cleanUsername;
-        let mockDept = 'Research';
-        
-        if (cleanUsername === 'admin' || cleanUsername === 'raghav') {
-          mockRole = 'Admin';
-          mockDept = 'Admin';
-          mockName = cleanUsername === 'raghav' ? 'Raghav' : 'Studio Administrator';
-        } else if (cleanUsername === 'teacher') {
-          mockRole = 'Teacher';
-          mockDept = 'Teacher';
-          mockName = 'Faculty Mentor';
-        } else if (cleanUsername === 'maya') {
-          mockRole = 'Member';
-          mockDept = 'Hosts';
-          mockName = 'Maya Patel';
-        } else if (cleanUsername === 'aarav') {
-          mockRole = 'Member';
-          mockDept = 'Editing';
-          mockName = 'Aarav Sharma';
-        }
-
-        const session = {
-          id: `usr-${cleanUsername}`,
-          username: cleanUsername,
-          role: mockRole,
-          name: mockName,
-          department: mockDept,
-          isCustom: true
-        };
-        localStorage.setItem('vibes_custom_session', JSON.stringify(session));
-        setUser(session);
-        return;
+        throw new Error('Database is currently not connected. Please check network.');
       }
 
       // Query Supabase directly for authorized user
@@ -196,12 +163,6 @@ export function AuthGate({ children }: AuthGateProps) {
     setPassword('');
     setErrorMsg(null);
     setInfoMsg(null);
-  };
-
-  const quickFill = (u: string, p: string) => {
-    setUsernameInput(u);
-    setPassword(p);
-    setErrorMsg(null);
   };
 
   if (loading) {
@@ -359,7 +320,7 @@ export function AuthGate({ children }: AuthGateProps) {
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="w-full h-11 mt-2 bg-[#3e6688] hover:bg-[#4d7ca6] text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-[#3e6688]/20 cursor-pointer disabled:opacity-50"
+                  className="w-full h-11 mt-4 bg-[#3e6688] hover:bg-[#4d7ca6] text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-[#3e6688]/20 cursor-pointer disabled:opacity-50"
                 >
                   {formLoading ? 'Authenticating...' : (
                     <>
@@ -368,43 +329,6 @@ export function AuthGate({ children }: AuthGateProps) {
                     </>
                   )}
                 </button>
-
-                {/* Quick login chips for testing / quick access */}
-                <div className="pt-3 border-t border-[#222b3d]/60">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-mono block mb-2">
-                    Quick Logins (Click to autofill):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => quickFill('raghav', 'raghav')}
-                      className="px-2.5 py-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] rounded-lg text-[11px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
-                    >
-                      @raghav (Admin)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => quickFill('teacher', 'teacher2026')}
-                      className="px-2.5 py-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] rounded-lg text-[11px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
-                    >
-                      @teacher (Faculty)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => quickFill('maya', 'vibes2026')}
-                      className="px-2.5 py-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] rounded-lg text-[11px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
-                    >
-                      @maya (Host)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => quickFill('aarav', 'vibes2026')}
-                      className="px-2.5 py-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] rounded-lg text-[11px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
-                    >
-                      @aarav (Editor)
-                    </button>
-                  </div>
-                </div>
               </form>
             ) : (
               <form onSubmit={handleRequestAccess} className="space-y-3.5">
@@ -475,14 +399,14 @@ export function AuthGate({ children }: AuthGateProps) {
           </AnimatePresence>
         </div>
 
-        {/* Footer info: Supabase cloud status */}
+        {/* Footer info: Secure Connection status */}
         <div className="p-3.5 border-t border-[#222b3d] bg-[#0e121a] flex items-center justify-between text-[11px] text-slate-500 font-mono">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>SUPABASE LIVE</span>
+            <span>SECURE LIVE DATABASE</span>
           </div>
-          <span className="text-[10px] text-slate-500 truncate max-w-[200px]">
-            vtgjsdysbmpiipufdyxm.supabase.co
+          <span className="text-[10px] text-slate-500">
+            CARDINAL SYSTEMS
           </span>
         </div>
       </motion.div>
