@@ -416,9 +416,19 @@ export default function App() {
     priority: Priority;
     planned_start: string; 
     planned_end: string; 
-    dependency?: string 
+    dependency?: string;
+    assigned_to?: string | null;
   }) => {
-    const newId = `TSK-${String(nodes.length + 101)}`;
+    const maxIdNum = nodes.reduce((max, node) => {
+      const match = node.id.match(/^(?:TSK|ND|N)-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        return num > max ? num : max;
+      }
+      return max;
+    }, 100);
+
+    const newId = `TSK-${String(maxIdNum + 1).padStart(3, '0')}`;
     const newNode: Node = {
       id: newId,
       ...nodeData,
@@ -428,6 +438,36 @@ export default function App() {
     };
     setNodes(prev => [...prev, newNode]);
     supabaseService.upsertNode(newNode).catch(console.error);
+  };
+
+  // --- Episode Handlers ---
+  const handleCreateEpisode = (epData: Omit<Episode, 'id' | 'created_at'>) => {
+    const maxEpNum = episodes.reduce((max, ep) => {
+      const match = ep.id.match(/^EP-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        return num > max ? num : max;
+      }
+      return max;
+    }, 0);
+    const newId = `EP-${String(maxEpNum + 1).padStart(2, '0')}`;
+    const newEp: Episode = {
+      id: newId,
+      ...epData,
+      created_at: new Date().toISOString()
+    };
+    setEpisodes(prev => [newEp, ...prev]);
+    supabaseService.upsertEpisode(newEp).catch(console.error);
+  };
+
+  const handleEditEpisode = (id: string, updatedEp: Episode) => {
+    setEpisodes(prev => prev.map(e => e.id === id ? updatedEp : e));
+    supabaseService.upsertEpisode(updatedEp).catch(console.error);
+  };
+
+  const handleDeleteEpisode = (id: string) => {
+    setEpisodes(prev => prev.filter(e => e.id !== id));
+    supabaseService.deleteEpisode(id).catch(console.error);
   };
 
   const handleUpdateStatus = (id: string, newStatus: Status) => {
@@ -574,7 +614,9 @@ export default function App() {
           <div className="h-full">
             <EpisodeHub
               episodes={episodes}
-              setEpisodes={setEpisodes}
+              onAddEpisode={handleCreateEpisode}
+              onEditEpisode={handleEditEpisode}
+              onDeleteEpisode={handleDeleteEpisode}
               currentRole={currentRole}
             />
           </div>

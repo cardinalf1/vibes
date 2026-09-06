@@ -8,7 +8,9 @@ import { Episode, EpisodeStatus } from '../types';
 
 interface EpisodeHubProps {
   episodes: Episode[];
-  setEpisodes: React.Dispatch<React.SetStateAction<Episode[]>>;
+  onAddEpisode: (ep: Omit<Episode, 'id' | 'created_at'>) => void;
+  onEditEpisode: (id: string, updatedEp: Episode) => void;
+  onDeleteEpisode: (id: string) => void;
   currentRole: string;
 }
 
@@ -21,7 +23,13 @@ const STATUS_CONFIG: Record<EpisodeStatus, { label: string; color: string; bg: s
   'Published': { label: 'Published & Live', color: '#4ade80', bg: '#16653430' }
 };
 
-export function EpisodeHub({ episodes, setEpisodes, currentRole }: EpisodeHubProps) {
+export function EpisodeHub({ 
+  episodes, 
+  onAddEpisode,
+  onEditEpisode,
+  onDeleteEpisode,
+  currentRole 
+}: EpisodeHubProps) {
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEpisode, setEditingEpisode] = useState<Episode | null>(null);
@@ -40,7 +48,6 @@ export function EpisodeHub({ episodes, setEpisodes, currentRole }: EpisodeHubPro
   const [audioUrl, setAudioUrl] = useState('');
 
   const openNewModal = () => {
-    const nextNum = episodes.length + 1;
     setEditingEpisode(null);
     setTitle('');
     setTargetDate(new Date().toISOString().split('T')[0]);
@@ -73,25 +80,8 @@ export function EpisodeHub({ episodes, setEpisodes, currentRole }: EpisodeHubPro
     if (!title.trim()) return;
 
     if (editingEpisode) {
-      const updated = episodes.map(ep => 
-        ep.id === editingEpisode.id ? {
-          ...ep,
-          title: title.trim(),
-          target_release_date: targetDate,
-          status,
-          hosts: hosts.trim() || undefined,
-          guest_name: guestName.trim() || undefined,
-          runtime_minutes: typeof runtimeMinutes === 'number' ? runtimeMinutes : undefined,
-          notes: notes.trim() || undefined,
-          department_notes: departmentNotes.trim() || undefined,
-          audio_url: audioUrl.trim() || undefined
-        } : ep
-      );
-      setEpisodes(updated);
-    } else {
-      const newId = `EP-${String(episodes.length + 1).padStart(2, '0')}`;
-      const newEpisode: Episode = {
-        id: newId,
+      const updated: Episode = {
+        ...editingEpisode,
         title: title.trim(),
         target_release_date: targetDate,
         status,
@@ -100,17 +90,29 @@ export function EpisodeHub({ episodes, setEpisodes, currentRole }: EpisodeHubPro
         runtime_minutes: typeof runtimeMinutes === 'number' ? runtimeMinutes : undefined,
         notes: notes.trim() || undefined,
         department_notes: departmentNotes.trim() || undefined,
-        audio_url: audioUrl.trim() || undefined,
-        created_at: new Date().toISOString()
+        audio_url: audioUrl.trim() || undefined
       };
-      setEpisodes([newEpisode, ...episodes]);
+      onEditEpisode(editingEpisode.id, updated);
+      if (selectedEpisode?.id === editingEpisode.id) setSelectedEpisode(updated);
+    } else {
+      onAddEpisode({
+        title: title.trim(),
+        target_release_date: targetDate,
+        status,
+        hosts: hosts.trim() || undefined,
+        guest_name: guestName.trim() || undefined,
+        runtime_minutes: typeof runtimeMinutes === 'number' ? runtimeMinutes : undefined,
+        notes: notes.trim() || undefined,
+        department_notes: departmentNotes.trim() || undefined,
+        audio_url: audioUrl.trim() || undefined
+      });
     }
     setIsModalOpen(false);
   };
 
   const handleDelete = (id: string) => {
     if (confirm('Delete this episode from the production ledger?')) {
-      setEpisodes(episodes.filter(ep => ep.id !== id));
+      onDeleteEpisode(id);
       if (selectedEpisode?.id === id) setSelectedEpisode(null);
     }
   };
