@@ -269,6 +269,8 @@ export default function App() {
           let submittedBy = null;
           let submissionNotes = null;
 
+          let assignees: string[] = [];
+
           if (desc.startsWith('{')) {
             try {
               const parsed = JSON.parse(desc);
@@ -278,7 +280,14 @@ export default function App() {
               if (parsed.review_notes) reviewNotes = parsed.review_notes;
               if (parsed.submitted_by) submittedBy = parsed.submitted_by;
               if (parsed.submission_notes) submissionNotes = parsed.submission_notes;
+              if (parsed.assignees && Array.isArray(parsed.assignees)) {
+                assignees = parsed.assignees;
+              }
             } catch (e) {}
+          }
+
+          if (assignees.length === 0 && newNode.assigned_to) {
+            assignees = newNode.assigned_to.split(',').map((s: string) => s.trim()).filter(Boolean);
           }
 
           const processedNode: Node = {
@@ -288,7 +297,8 @@ export default function App() {
             review_status: reviewStatus as any,
             review_notes: reviewNotes,
             submitted_by: submittedBy,
-            submission_notes: submissionNotes
+            submission_notes: submissionNotes,
+            assignees: assignees
           };
 
           setNodes(prev => {
@@ -443,9 +453,19 @@ export default function App() {
     planned_end: string;
     dependency?: string;
     assigned_to?: string | null;
+    assignees?: string[];
     episode_id?: string;
   }) => {
     const newId = `TSK-${Date.now().toString().slice(-4)}`;
+    const assigneesList = taskData.assignees && taskData.assignees.length > 0
+      ? taskData.assignees
+      : (taskData.assigned_to ? taskData.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+    const assignedNames = assigneesList.map(u => {
+      const found = authorizedUsers.find(au => au.username === u);
+      return found ? (found.name || u) : u;
+    });
+
     const newNode: Node = {
       id: newId,
       title: taskData.title,
@@ -458,8 +478,9 @@ export default function App() {
       actual_start: null,
       actual_end: null,
       dependency: taskData.dependency,
-      assigned_to: taskData.assigned_to || null,
-      assigned_name: taskData.assigned_to ? authorizedUsers.find(u => u.username === taskData.assigned_to)?.name || taskData.assigned_to : null,
+      assigned_to: assigneesList.length > 0 ? assigneesList.join(',') : null,
+      assigned_name: assignedNames.length > 0 ? assignedNames.join(', ') : null,
+      assignees: assigneesList,
       episode_id: taskData.episode_id || selectedEpisode?.id || 'EP-01',
       review_status: 'None'
     };
@@ -470,7 +491,7 @@ export default function App() {
       title: newNode.title,
       department: newNode.department,
       episode_id: newNode.episode_id,
-      assigned_to: newNode.assigned_to
+      assignees: assigneesList
     });
   };
 
@@ -562,22 +583,41 @@ export default function App() {
     }
   };
 
-  const handleAssignStudentToTask = (id: string, username: string | null) => {
-    const assignedUser = username ? authorizedUsers.find(u => u.username === username) : null;
+  const handleAssignStudentToTask = (id: string, username: string | null, mode: 'set' | 'add' | 'remove' = 'add') => {
     const updated = nodes.map(n => {
       if (n.id !== id) return n;
+      let currentAssignees = n.assignees && n.assignees.length > 0
+        ? [...n.assignees]
+        : (n.assigned_to ? n.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+      if (mode === 'add' && username) {
+        if (!currentAssignees.includes(username)) currentAssignees.push(username);
+      } else if (mode === 'remove' && username) {
+        currentAssignees = currentAssignees.filter(u => u !== username);
+      } else if (mode === 'set') {
+        currentAssignees = username ? [username] : [];
+      }
+
+      const assignedNames = currentAssignees.map(u => {
+        const found = authorizedUsers.find(au => au.username === u);
+        return found ? (found.name || u) : u;
+      });
+
       return {
         ...n,
-        assigned_to: username,
-        assigned_name: assignedUser ? assignedUser.name || username : null
+        assignees: currentAssignees,
+        assigned_to: currentAssignees.length > 0 ? currentAssignees.join(',') : null,
+        assigned_name: assignedNames.length > 0 ? assignedNames.join(', ') : null
       };
     });
+
     setNodes(updated);
     const item = updated.find(n => n.id === id);
     if (item) {
       supabaseService.upsertNode(item).catch(console.error);
       logEvent(username ? 'STUDENT_ASSIGNED_TO_TASK' : 'STUDENT_UNASSIGNED_FROM_TASK', 'task', id, {
         assigned_student: username,
+        assignees: item.assignees,
         task_title: item.title,
         department: item.department
       });

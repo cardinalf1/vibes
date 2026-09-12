@@ -165,9 +165,18 @@ export function TeacherReviewPanel({
 
                     {/* Student Submission Proof / Notes */}
                     <div className="bg-[#0b0e14] border border-[#222b3d] rounded-xl p-3 flex flex-col gap-1">
-                      <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-                        <User className="w-3.5 h-3.5 text-[#3e6688]" />
-                        <span>Submitted by: <strong className="text-white">@{task.submitted_by || task.assigned_to || 'student'}</strong></span>
+                      <div className="flex items-center gap-4 flex-wrap text-[11px] text-slate-400 font-mono">
+                        <div className="flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-[#3e6688]" />
+                          <span>Submitted by: <strong className="text-white">@{task.submitted_by || 'student'}</strong></span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span>Assignees: <strong className="text-slate-200">{
+                            task.assignees && task.assignees.length > 0
+                              ? task.assignees.map(u => `@${u}`).join(', ')
+                              : (task.assigned_to ? task.assigned_to.split(',').map(s => `@${s.trim()}`).join(', ') : 'Unassigned')
+                          }</strong></span>
+                        </div>
                       </div>
                       <p className="text-xs text-slate-200 italic mt-0.5">
                         "{task.submission_notes || 'Deliverables finalized for QA verification.'}"
@@ -254,7 +263,11 @@ export function TeacherReviewPanel({
                       </span>
                     </div>
                     <span className="text-[11px] text-slate-400 font-mono mt-0.5 block">
-                      {task.department} • {task.episode_id || 'EP-01'} • Assigned: @{task.assigned_to || 'unassigned'}
+                      {task.department} • {task.episode_id || 'EP-01'} • Assigned: {
+                        task.assignees && task.assignees.length > 0
+                          ? task.assignees.map(u => `@${u}`).join(', ')
+                          : (task.assigned_to ? task.assigned_to.split(',').map(s => `@${s.trim()}`).join(', ') : 'Unassigned')
+                      }
                     </span>
                   </div>
 

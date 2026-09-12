@@ -162,6 +162,8 @@ export const supabaseService = {
         let submittedBy = null;
         let submissionNotes = null;
 
+        let assignees: string[] = [];
+
         if (desc.startsWith('{')) {
           try {
             const parsed = JSON.parse(desc);
@@ -171,9 +173,16 @@ export const supabaseService = {
             if (parsed.review_notes) reviewNotes = parsed.review_notes;
             if (parsed.submitted_by) submittedBy = parsed.submitted_by;
             if (parsed.submission_notes) submissionNotes = parsed.submission_notes;
+            if (parsed.assignees && Array.isArray(parsed.assignees)) {
+              assignees = parsed.assignees;
+            }
           } catch (e) {
             // Keep plain string
           }
+        }
+
+        if (assignees.length === 0 && node.assigned_to) {
+          assignees = node.assigned_to.split(',').map((s: string) => s.trim()).filter(Boolean);
         }
 
         return {
@@ -183,7 +192,8 @@ export const supabaseService = {
           review_status: reviewStatus as any,
           review_notes: reviewNotes,
           submitted_by: submittedBy,
-          submission_notes: submissionNotes
+          submission_notes: submissionNotes,
+          assignees: assignees
         };
       }) as Node[];
     } catch (e) {
@@ -195,14 +205,21 @@ export const supabaseService = {
   async upsertNode(node: Node): Promise<void> {
     if (!isSupabaseConfigured || !supabase) return;
     try {
+      const assigneesList = node.assignees && node.assignees.length > 0 
+        ? node.assignees 
+        : (node.assigned_to ? node.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : []);
+
       const descEnvelope = JSON.stringify({
         text: node.description || '',
         episode_id: node.episode_id || 'EP-01',
         review_status: node.review_status || 'None',
         review_notes: node.review_notes || null,
         submitted_by: node.submitted_by || null,
-        submission_notes: node.submission_notes || null
+        submission_notes: node.submission_notes || null,
+        assignees: assigneesList
       });
+
+      const assignedToStr = assigneesList.length > 0 ? assigneesList.join(',') : (node.assigned_to || null);
 
       const { error } = await supabase
         .from('nodes')
@@ -218,7 +235,7 @@ export const supabaseService = {
           actual_start: node.actual_start ? node.actual_start : null,
           actual_end: node.actual_end ? node.actual_end : null,
           dependency: node.episode_id || node.dependency || null,
-          assigned_to: node.assigned_to ? node.assigned_to : null,
+          assigned_to: assignedToStr,
           assigned_name: node.assigned_name ? node.assigned_name : null
         });
 

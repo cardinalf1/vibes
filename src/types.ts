@@ -28,8 +28,9 @@ export interface Node {
   actual_start: string | null;
   actual_end: string | null;
   dependency?: string; // ID of prerequisite task
-  assigned_to?: string | null; // username
+  assigned_to?: string | null; // comma-separated usernames e.g. "maya,aarav"
   assigned_name?: string | null;
+  assignees?: string[]; // array of assigned usernames ['maya', 'aarav']
   created_by?: string | null;
   // Overhaul review & episode properties
   episode_id?: string | null;

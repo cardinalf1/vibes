@@ -25,11 +25,12 @@ interface EpisodeDetailViewProps {
     planned_end: string; 
     dependency?: string;
     assigned_to?: string | null;
+    assignees?: string[];
     episode_id?: string;
   }) => void;
   onUpdateTaskStatus: (id: string, status: Status) => void;
   onSubmitTaskForReview: (id: string, proofNotes: string) => Promise<void>;
-  onAssignStudentToTask: (taskId: string, username: string | null) => void;
+  onAssignStudentToTask: (taskId: string, username: string | null, mode?: 'set' | 'add' | 'remove') => void;
   onDeleteTask: (id: string) => void;
 }
 
@@ -62,7 +63,7 @@ export function EpisodeDetailView({
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>('Medium');
   const [newTaskStart, setNewTaskStart] = useState(new Date().toISOString().split('T')[0]);
   const [newTaskEnd, setNewTaskEnd] = useState(new Date().toISOString().split('T')[0]);
-  const [newTaskAssignee, setNewTaskAssignee] = useState('');
+  const [newTaskAssignees, setNewTaskAssignees] = useState<string[]>([]);
 
   // Filter production departments (exclude Admin role)
   const productionDepts = departments.filter(d => d.name.toLowerCase() !== 'admin');
@@ -104,7 +105,12 @@ export function EpisodeDetailView({
   const episodeCrewMembers = users.filter(u => episodeCrewUsernames.includes(u.username));
 
   // Calculate Available Staff Bay (Only students assigned to this episode who don't have an active task in this episode)
-  const assignedUsernames = new Set(episodeTasks.map(t => t.assigned_to).filter(Boolean));
+  const assignedUsernames = new Set(
+    episodeTasks.flatMap(t => t.assignees && t.assignees.length > 0 
+      ? t.assignees 
+      : (t.assigned_to ? t.assigned_to.split(',').map(s => s.trim()) : [])
+    )
+  );
   const availableStudents = episodeCrewMembers.filter(u => !assignedUsernames.has(u.username));
 
   const handleAddCrewMember = (deptToAssign?: string, unameToAssign?: string) => {
@@ -152,12 +158,14 @@ export function EpisodeDetailView({
       priority: newTaskPriority,
       planned_start: newTaskStart,
       planned_end: newTaskEnd,
-      assigned_to: newTaskAssignee || null,
+      assignees: newTaskAssignees,
+      assigned_to: newTaskAssignees.length > 0 ? newTaskAssignees.join(',') : null,
       episode_id: episode.id
     });
 
     setNewTaskTitle('');
     setNewTaskDesc('');
+    setNewTaskAssignees([]);
     setIsAddingTask(false);
   };
 
@@ -437,13 +445,17 @@ export function EpisodeDetailView({
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {episodeTasks.map(task => {
-                  const isAssignedToMe = task.assigned_to?.toLowerCase() === (currentUsername || '').toLowerCase();
+                  const taskAssignees = task.assignees && task.assignees.length > 0
+                    ? task.assignees
+                    : (task.assigned_to ? task.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+                  const isAssignedToMe = taskAssignees.some(u => u.toLowerCase() === (currentUsername || '').toLowerCase());
                   const isMyDept = userDepartment?.toLowerCase() === task.department.toLowerCase();
                   const canSubmitReview = isTeacherOrAdmin || isAssignedToMe || isMyDept;
                   const isDragTarget = dragOverTaskId === task.id;
 
                   // Confidential Feedback Gate:
-                  // Only members of this task's department OR teachers/admins can see teacher revert notes
+                  // Only members of this task's department OR assignees OR teachers/admins can see teacher revert notes
                   const canViewFeedback = isTeacherOrAdmin || isMyDept || isAssignedToMe;
 
                   return (
@@ -457,7 +469,7 @@ export function EpisodeDetailView({
                       onDrop={(e) => {
                         e.preventDefault();
                         if (draggedUsername) {
-                          onAssignStudentToTask(task.id, draggedUsername);
+                          onAssignStudentToTask(task.id, draggedUsername, 'add');
                           setDraggedUsername(null);
                           setDragOverTaskId(null);
                         }
@@ -498,26 +510,51 @@ export function EpisodeDetailView({
                           </p>
                         </div>
 
-                        {/* Assignee & Dates */}
+                        {/* Assignees & Dates */}
                         <div className="flex flex-col sm:items-end gap-1.5 text-xs">
-                          <div className="flex items-center gap-1.5 font-mono text-slate-300">
-                            <User className="w-3.5 h-3.5 text-[#3e6688]" />
-                            {isTeacherOrAdmin ? (
-                              <select
-                                value={task.assigned_to || ''}
-                                onChange={(e) => onAssignStudentToTask(task.id, e.target.value || null)}
-                                className="bg-[#0b0e14] border border-[#222b3d] rounded-lg px-2 py-0.5 text-xs text-slate-200 outline-none cursor-pointer hover:border-[#3e6688]"
-                                title="Assign to episode crew member"
-                              >
-                                <option value="">-- Unassigned --</option>
-                                {episodeCrewMembers.map(u => (
-                                  <option key={u.username} value={u.username}>
-                                    @{u.username} ({u.department})
-                                  </option>
-                                ))}
-                              </select>
+                          <div className="flex items-center gap-1.5 flex-wrap sm:justify-end font-mono text-slate-300">
+                            <Users className="w-3.5 h-3.5 text-[#3e6688] shrink-0" />
+                            <span className="text-slate-400 text-[11px]">Assignees:</span>
+                            {taskAssignees.length === 0 ? (
+                              <span className="text-slate-600 italic text-[11px]">Unassigned</span>
                             ) : (
-                              <span>Assignee: <strong className="text-white">@{task.assigned_to || 'unassigned'}</strong></span>
+                              taskAssignees.map(uname => (
+                                <span
+                                  key={uname}
+                                  className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#0b0e14] border border-[#222b3d] text-slate-200"
+                                >
+                                  <span>@{uname}</span>
+                                  {isTeacherOrAdmin && (
+                                    <button
+                                      onClick={() => onAssignStudentToTask(task.id, uname, 'remove')}
+                                      className="text-slate-500 hover:text-red-400 p-0.5 ml-0.5 cursor-pointer leading-none"
+                                      title={`Remove @${uname} from this task`}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </span>
+                              ))
+                            )}
+
+                            {isTeacherOrAdmin && (
+                              <select
+                                value=""
+                                onChange={(e) => {
+                                  if (e.target.value) onAssignStudentToTask(task.id, e.target.value, 'add');
+                                }}
+                                className="bg-[#0b0e14] border border-[#222b3d] hover:border-[#3e6688] rounded-lg px-2 py-0.5 text-[11px] text-[#f5c358] outline-none cursor-pointer"
+                                title="Add another crew member to this task"
+                              >
+                                <option value="">+ Add Person</option>
+                                {episodeCrewMembers
+                                  .filter(u => !taskAssignees.includes(u.username))
+                                  .map(u => (
+                                    <option key={u.username} value={u.username}>
+                                      @{u.username} ({u.department})
+                                    </option>
+                                  ))}
+                              </select>
                             )}
                           </div>
                           <span className="text-[11px] font-mono text-slate-400">
@@ -704,38 +741,54 @@ export function EpisodeDetailView({
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Department</label>
-                    <select
-                      value={newTaskDept}
-                      onChange={(e) => setNewTaskDept(e.target.value)}
-                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none"
-                    >
-                      {departments.map(d => (
-                        <option key={d.id} value={d.name}>{d.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Department</label>
+                  <select
+                    value={newTaskDept}
+                    onChange={(e) => setNewTaskDept(e.target.value)}
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none"
+                  >
+                    {productionDepts.map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Assignee (Episode Crew Only)</label>
-                    <select
-                      value={newTaskAssignee}
-                      onChange={(e) => setNewTaskAssignee(e.target.value)}
-                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
-                    >
-                      <option value="">-- Unassigned --</option>
-                      {episodeCrewMembers.length === 0 ? (
-                        <option value="" disabled>No crew assigned to this episode yet</option>
-                      ) : (
-                        episodeCrewMembers.map(u => (
-                          <option key={u.username} value={u.username}>
-                            {u.name || `@${u.username}`} ({u.department})
-                          </option>
-                        ))
-                      )}
-                    </select>
+                {/* Multi-Select Assignees from Episode Crew */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300 block">
+                    Assign Crew Members (Select one or more)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 bg-[#0b0e14] border border-[#222b3d] rounded-xl">
+                    {episodeCrewMembers.length === 0 ? (
+                      <span className="text-xs text-slate-500 italic p-1">
+                        No crew members assigned to this episode yet. Assign crew in the roster above first.
+                      </span>
+                    ) : (
+                      episodeCrewMembers.map(u => {
+                        const isSelected = newTaskAssignees.includes(u.username);
+                        return (
+                          <button
+                            key={u.username}
+                            type="button"
+                            onClick={() => {
+                              setNewTaskAssignees(prev =>
+                                isSelected ? prev.filter(x => x !== u.username) : [...prev, u.username]
+                              );
+                            }}
+                            className={`text-[11px] font-mono px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#3e6688] text-white border-[#3e6688] shadow-sm font-bold'
+                                : 'bg-[#181e2b] text-slate-300 border-[#222b3d] hover:border-[#3e6688]'
+                            }`}
+                          >
+                            <span>@{u.username}</span>
+                            <span className="text-[9px] font-sans text-slate-400">({u.department})</span>
+                            {isSelected && <span className="text-emerald-300 font-bold">✓</span>}
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
