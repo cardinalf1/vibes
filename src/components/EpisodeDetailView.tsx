@@ -35,6 +35,11 @@ interface EpisodeDetailViewProps {
   onDeleteTask: (id: string) => void;
 }
 
+let globalDragPayload: { username: string | null; sourceTaskId: string | null } = {
+  username: null,
+  sourceTaskId: null
+};
+
 export function EpisodeDetailView({
   episode,
   nodes,
@@ -50,7 +55,7 @@ export function EpisodeDetailView({
   onDeleteTask
 }: EpisodeDetailViewProps) {
   const { user, username: currentUsername, role: authRole, department: userDepartment } = useAuth();
-  const isTeacherOrAdmin = authRole === 'Admin' || authRole === 'Teacher';
+  const isTeacherOrAdmin = authRole?.toLowerCase() === 'admin' || authRole?.toLowerCase() === 'teacher';
 
   // Submitting for review modal / prompt state
   const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
@@ -79,13 +84,115 @@ export function EpisodeDetailView({
   const [activeTab, setActiveTab] = useState<'tasks' | 'gantt' | 'audio'>('tasks');
 
   // Drag-and-drop state
-  const [draggedUsername, setDraggedUsername] = useState<string | null>(null);
-  const [sourceTaskId, setSourceTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [isDragOverStaffBay, setIsDragOverStaffBay] = useState(false);
 
   // Filter tasks belonging strictly to this episode
   const episodeTasks = nodes.filter(n => (n.episode_id || 'EP-01') === episode.id);
+
+  const handleStartDrag = (e: React.DragEvent, username: string, taskId: string | null) => {
+    globalDragPayload = { username, sourceTaskId: taskId };
+    e.dataTransfer.setData('text/plain', username);
+    e.dataTransfer.setData('application/json', JSON.stringify({ username, sourceTaskId: taskId }));
+    e.dataTransfer.effectAllowed = 'move';
+    (window as any).__vibes_active_drag = { username, sourceTaskId: taskId };
+  };
+
+  const handleEndDrag = () => {
+    globalDragPayload = { username: null, sourceTaskId: null };
+    setDragOverTaskId(null);
+    setIsDragOverStaffBay(false);
+    (window as any).__vibes_active_drag = null;
+  };
+
+  const handleDropOnStaffBay = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let uname = globalDragPayload.username;
+    let fromTaskId = globalDragPayload.sourceTaskId;
+
+    try {
+      const raw = e.dataTransfer.getData('application/json');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.username) uname = parsed.username;
+        if (parsed.sourceTaskId) fromTaskId = parsed.sourceTaskId;
+      }
+    } catch (err) {}
+
+    if (!uname) uname = e.dataTransfer.getData('text/plain');
+    if (!fromTaskId && (window as any).__vibes_active_drag) {
+      fromTaskId = (window as any).__vibes_active_drag.sourceTaskId;
+      if (!uname) uname = (window as any).__vibes_active_drag.username;
+    }
+
+    if (uname) {
+      if (fromTaskId) {
+        onAssignStudentToTask(fromTaskId, uname, 'remove');
+      } else {
+        // Fallback: unassign uname from any task in this episode that currently holds them
+        episodeTasks.forEach(t => {
+          const assignees = t.assignees || (t.assigned_to ? t.assigned_to.split(',').map(s => s.trim()) : []);
+          if (assignees.includes(uname!)) {
+            onAssignStudentToTask(t.id, uname!, 'remove');
+          }
+        });
+      }
+    }
+
+    handleEndDrag();
+  };
+
+  const handleDropOnTask = (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let uname = globalDragPayload.username;
+    let fromTaskId = globalDragPayload.sourceTaskId;
+
+    try {
+      const raw = e.dataTransfer.getData('application/json');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.username) uname = parsed.username;
+        if (parsed.sourceTaskId) fromTaskId = parsed.sourceTaskId;
+      }
+    } catch (err) {}
+
+    if (!uname) uname = e.dataTransfer.getData('text/plain');
+    if (!fromTaskId && (window as any).__vibes_active_drag) {
+      fromTaskId = (window as any).__vibes_active_drag.sourceTaskId;
+      if (!uname) uname = (window as any).__vibes_active_drag.username;
+    }
+
+    // Fallback: If fromTaskId is null, check if uname is already in another task in this episode
+    if (uname && !fromTaskId) {
+      const existingTask = episodeTasks.find(t => {
+        if (t.id === targetTaskId) return false;
+        const assignees = t.assignees || (t.assigned_to ? t.assigned_to.split(',').map(s => s.trim()) : []);
+        return assignees.includes(uname!);
+      });
+      if (existingTask) {
+        fromTaskId = existingTask.id;
+      }
+    }
+
+    if (uname) {
+      if (fromTaskId && fromTaskId !== targetTaskId) {
+        if (onMoveStudentBetweenTasks) {
+          onMoveStudentBetweenTasks(fromTaskId, targetTaskId, uname);
+        } else {
+          onAssignStudentToTask(fromTaskId, uname, 'remove');
+          onAssignStudentToTask(targetTaskId, uname, 'add');
+        }
+      } else if (!fromTaskId || fromTaskId === targetTaskId) {
+        onAssignStudentToTask(targetTaskId, uname, 'add');
+      }
+    }
+
+    handleEndDrag();
+  };
 
   const completedTasks = episodeTasks.filter(n => n.status === 'Completed').length;
   const totalTasks = episodeTasks.length;
@@ -394,60 +501,26 @@ export function EpisodeDetailView({
               e.preventDefault();
               e.stopPropagation();
               e.dataTransfer.dropEffect = 'move';
-              if (isTeacherOrAdmin) {
-                setIsDragOverStaffBay(true);
-              }
+              if (!isDragOverStaffBay) setIsDragOverStaffBay(true);
             }}
             onDragEnter={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (isTeacherOrAdmin) {
-                setIsDragOverStaffBay(true);
-              }
+              if (!isDragOverStaffBay) setIsDragOverStaffBay(true);
             }}
             onDragLeave={(e) => {
               if (e.currentTarget === e.target) {
                 setIsDragOverStaffBay(false);
               }
             }}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              let uname = draggedUsername;
-              let fromTaskId = sourceTaskId;
-
-              try {
-                const raw = e.dataTransfer.getData('application/json');
-                if (raw) {
-                  const parsed = JSON.parse(raw);
-                  if (parsed.username) uname = parsed.username;
-                  if (parsed.sourceTaskId) fromTaskId = parsed.sourceTaskId;
-                }
-              } catch (err) {}
-
-              if (!uname) uname = e.dataTransfer.getData('text/plain');
-              if (!fromTaskId && (window as any).__vibes_active_drag) {
-                fromTaskId = (window as any).__vibes_active_drag.sourceTaskId;
-                if (!uname) uname = (window as any).__vibes_active_drag.username;
-              }
-
-              if (uname && fromTaskId) {
-                onAssignStudentToTask(fromTaskId, uname, 'remove');
-              }
-
-              setDraggedUsername(null);
-              setSourceTaskId(null);
-              setDragOverTaskId(null);
-              setIsDragOverStaffBay(false);
-              (window as any).__vibes_active_drag = null;
-            }}
+            onDrop={handleDropOnStaffBay}
             className={`border rounded-2xl p-4 space-y-2 shadow-lg transition-all ${
               isDragOverStaffBay
                 ? 'bg-[#162536] border-[#3e6688] ring-2 ring-[#3e6688]/60 shadow-xl'
                 : 'bg-[#121620]/90 border-[#3e6688]/40'
             }`}
           >
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center pointer-events-none">
               <div className="flex items-center gap-2">
                 <GripVertical className="w-4 h-4 text-[#3e6688]" />
                 <span className="text-xs font-bold uppercase tracking-wider text-white">
@@ -459,12 +532,6 @@ export function EpisodeDetailView({
               </span>
             </div>
 
-            {sourceTaskId && (
-              <div className="bg-[#3e6688]/20 border border-dashed border-[#3e6688] rounded-xl p-2.5 text-center text-xs text-[#9dbcd4] font-semibold animate-pulse">
-                ⬇ Drop @{draggedUsername} here to unassign from task and return to available bench
-              </div>
-            )}
-
             <div className="flex flex-wrap gap-2 pt-1">
               {episodeCrewMembers.length === 0 ? (
                 <span className="text-xs text-slate-500 italic py-1">
@@ -472,33 +539,21 @@ export function EpisodeDetailView({
                 </span>
               ) : availableStudents.length === 0 ? (
                 <span className="text-xs text-slate-500 italic py-1">
-                  All assigned episode crew members ({episodeCrewMembers.length}) currently have active tasks for this episode.
+                  All assigned episode crew members ({episodeCrewMembers.length}) currently have active tasks for this episode. Drag pills back here to unassign.
                 </span>
               ) : (
                 availableStudents.map(student => (
                   <div
                     key={student.username}
-                    draggable={isTeacherOrAdmin}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', student.username);
-                      e.dataTransfer.setData('application/json', JSON.stringify({ username: student.username, sourceTaskId: null }));
-                      e.dataTransfer.effectAllowed = 'move';
-                      setDraggedUsername(student.username);
-                      setSourceTaskId(null);
-                      (window as any).__vibes_active_drag = { username: student.username, sourceTaskId: null };
-                    }}
-                    onDragEnd={() => {
-                      setDraggedUsername(null);
-                      setSourceTaskId(null);
-                      setDragOverTaskId(null);
-                      setIsDragOverStaffBay(false);
-                      (window as any).__vibes_active_drag = null;
-                    }}
+                    draggable={true}
+                    onDragStart={(e) => handleStartDrag(e, student.username, null)}
+                    onDragEnd={handleEndDrag}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 cursor-grab active:cursor-grabbing shadow-sm hover:border-[#3e6688] transition-all select-none"
+                    title="Drag to assign to a task"
                   >
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                    <span className="font-semibold">{student.name || `@${student.username}`}</span>
-                    <span className="text-[10px] font-mono text-slate-400">({student.department || 'General'})</span>
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0 pointer-events-none" />
+                    <span className="font-semibold pointer-events-none">{student.name || `@${student.username}`}</span>
+                    <span className="text-[10px] font-mono text-slate-400 pointer-events-none">({student.department || 'General'})</span>
                   </div>
                 ))
               )}
@@ -545,53 +600,19 @@ export function EpisodeDetailView({
                         e.preventDefault();
                         e.stopPropagation();
                         e.dataTransfer.dropEffect = 'move';
-                        if (isTeacherOrAdmin) setDragOverTaskId(task.id);
+                        if (dragOverTaskId !== task.id) setDragOverTaskId(task.id);
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (dragOverTaskId !== task.id) setDragOverTaskId(task.id);
                       }}
                       onDragLeave={(e) => {
                         if (e.currentTarget === e.target) {
                           setDragOverTaskId(null);
                         }
                       }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        let uname = draggedUsername;
-                        let fromTaskId = sourceTaskId;
-
-                        try {
-                          const raw = e.dataTransfer.getData('application/json');
-                          if (raw) {
-                            const parsed = JSON.parse(raw);
-                            if (parsed.username) uname = parsed.username;
-                            if (parsed.sourceTaskId) fromTaskId = parsed.sourceTaskId;
-                          }
-                        } catch (err) {}
-
-                        if (!uname) uname = e.dataTransfer.getData('text/plain');
-                        if (!fromTaskId && (window as any).__vibes_active_drag) {
-                          fromTaskId = (window as any).__vibes_active_drag.sourceTaskId;
-                          if (!uname) uname = (window as any).__vibes_active_drag.username;
-                        }
-
-                        if (uname) {
-                          if (fromTaskId && fromTaskId !== task.id) {
-                            if (onMoveStudentBetweenTasks) {
-                              onMoveStudentBetweenTasks(fromTaskId, task.id, uname);
-                            } else {
-                              onAssignStudentToTask(fromTaskId, uname, 'remove');
-                              onAssignStudentToTask(task.id, uname, 'add');
-                            }
-                          } else if (!fromTaskId) {
-                            onAssignStudentToTask(task.id, uname, 'add');
-                          }
-                        }
-
-                        setDraggedUsername(null);
-                        setSourceTaskId(null);
-                        setDragOverTaskId(null);
-                        setIsDragOverStaffBay(false);
-                        (window as any).__vibes_active_drag = null;
-                      }}
+                      onDrop={(e) => handleDropOnTask(e, task.id)}
                       className={`bg-[#121620] border rounded-2xl p-5 shadow-lg space-y-4 transition-all ${
                         isDragTarget 
                           ? 'border-[#3e6688] ring-2 ring-[#3e6688]/40 bg-[#181e2b]' 
@@ -649,7 +670,18 @@ export function EpisodeDetailView({
                           )}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 min-h-[38px] p-2 bg-[#0b0e14] border border-[#222b3d] rounded-xl">
+                        <div 
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.dataTransfer.dropEffect = 'move';
+                            if (dragOverTaskId !== task.id) setDragOverTaskId(task.id);
+                          }}
+                          onDrop={(e) => handleDropOnTask(e, task.id)}
+                          className={`flex flex-wrap items-center gap-2 min-h-[42px] p-2.5 bg-[#0b0e14] border rounded-xl transition-all ${
+                            isDragTarget ? 'border-[#3e6688] bg-[#141d2a] ring-1 ring-[#3e6688]' : 'border-[#222b3d]'
+                          }`}
+                        >
                           {taskAssignees.length === 0 ? (
                             <span className="text-xs text-slate-500 italic py-1 px-1">
                               No students assigned. Drag student pills from the Staff Bay or another task here.
@@ -665,33 +697,28 @@ export function EpisodeDetailView({
                               return (
                                 <div
                                   key={uname}
-                                  draggable={isTeacherOrAdmin}
-                                  onDragStart={(e) => {
-                                    if (!isTeacherOrAdmin) return;
-                                    e.dataTransfer.setData('text/plain', uname);
-                                    e.dataTransfer.setData('application/json', JSON.stringify({ username: uname, sourceTaskId: task.id }));
-                                    e.dataTransfer.effectAllowed = 'move';
-                                    setDraggedUsername(uname);
-                                    setSourceTaskId(task.id);
-                                    (window as any).__vibes_active_drag = { username: uname, sourceTaskId: task.id };
-                                  }}
-                                  onDragEnd={() => {
-                                    setDraggedUsername(null);
-                                    setSourceTaskId(null);
-                                    setDragOverTaskId(null);
-                                    setIsDragOverStaffBay(false);
-                                    (window as any).__vibes_active_drag = null;
-                                  }}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 transition-all select-none shadow-sm ${
-                                    isTeacherOrAdmin
-                                      ? 'cursor-grab active:cursor-grabbing hover:border-[#3e6688]'
-                                      : ''
-                                  }`}
+                                  draggable={true}
+                                  onDragStart={(e) => handleStartDrag(e, uname, task.id)}
+                                  onDragEnd={handleEndDrag}
+                                  className="group/pill flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 transition-all select-none shadow-sm cursor-grab active:cursor-grabbing hover:border-[#3e6688]"
                                   title={isTeacherOrAdmin ? `Drag @${uname} to another task or drag to Staff Bay to unassign` : student.name}
                                 >
-                                  <div className="w-2 h-2 rounded-full bg-[#3e6688] shrink-0" />
-                                  <span className="font-semibold">{student.name || `@${uname}`}</span>
-                                  <span className="text-[10px] font-mono text-slate-400">({student.department || task.department})</span>
+                                  <div className="w-2 h-2 rounded-full bg-[#3e6688] shrink-0 pointer-events-none" />
+                                  <span className="font-semibold pointer-events-none">{student.name || `@${uname}`}</span>
+                                  <span className="text-[10px] font-mono text-slate-400 pointer-events-none">({student.department || task.department})</span>
+                                  {isTeacherOrAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onAssignStudentToTask(task.id, uname, 'remove');
+                                      }}
+                                      className="text-slate-500 hover:text-red-400 hover:bg-red-950/40 p-0.5 ml-1 rounded cursor-pointer leading-none text-xs"
+                                      title="Return to Staff Bay"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
                                 </div>
                               );
                             })
