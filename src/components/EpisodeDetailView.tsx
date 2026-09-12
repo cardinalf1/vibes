@@ -96,12 +96,16 @@ export function EpisodeDetailView({
     pacingBadge = { label: 'Completed & Broadcast', color: 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' };
   }
 
-  // Calculate Available Staff Bay (Students with no active task in this episode)
-  const assignedUsernames = new Set(episodeTasks.map(t => t.assigned_to).filter(Boolean));
-  const availableStudents = users.filter(u => u.role === 'Member' && !assignedUsernames.has(u.username));
-
-  // Current Episode Assigned Crew Map
+  // Current Episode Assigned Crew Map (Multiple students per department)
   const crewMap: Record<string, string[]> = episode.assigned_crew || {};
+
+  // All students assigned to this episode across all departments
+  const episodeCrewUsernames = Array.from(new Set(Object.values(crewMap).flat().filter(Boolean)));
+  const episodeCrewMembers = users.filter(u => episodeCrewUsernames.includes(u.username));
+
+  // Calculate Available Staff Bay (Only students assigned to this episode who don't have an active task in this episode)
+  const assignedUsernames = new Set(episodeTasks.map(t => t.assigned_to).filter(Boolean));
+  const availableStudents = episodeCrewMembers.filter(u => !assignedUsernames.has(u.username));
 
   const handleAddCrewMember = (deptToAssign?: string, unameToAssign?: string) => {
     const targetDept = deptToAssign || selectedCrewDept;
@@ -387,9 +391,13 @@ export function EpisodeDetailView({
             </div>
 
             <div className="flex flex-wrap gap-2 pt-1">
-              {availableStudents.length === 0 ? (
+              {episodeCrewMembers.length === 0 ? (
                 <span className="text-xs text-slate-500 italic py-1">
-                  All active students currently have assigned tasks for this episode.
+                  No crew members assigned to this episode yet. Click on any department role above to assign students first.
+                </span>
+              ) : availableStudents.length === 0 ? (
+                <span className="text-xs text-slate-500 italic py-1">
+                  All assigned episode crew members ({episodeCrewMembers.length}) currently have active tasks for this episode.
                 </span>
               ) : (
                 availableStudents.map(student => (
@@ -491,18 +499,25 @@ export function EpisodeDetailView({
                         </div>
 
                         {/* Assignee & Dates */}
-                        <div className="flex flex-col sm:items-end gap-1 text-xs">
+                        <div className="flex flex-col sm:items-end gap-1.5 text-xs">
                           <div className="flex items-center gap-1.5 font-mono text-slate-300">
                             <User className="w-3.5 h-3.5 text-[#3e6688]" />
-                            <span>Assignee: <strong className="text-white">@{task.assigned_to || 'unassigned'}</strong></span>
-                            {isTeacherOrAdmin && task.assigned_to && (
-                              <button
-                                onClick={() => onAssignStudentToTask(task.id, null)}
-                                className="text-slate-500 hover:text-red-400 ml-1 text-xs"
-                                title="Unassign"
+                            {isTeacherOrAdmin ? (
+                              <select
+                                value={task.assigned_to || ''}
+                                onChange={(e) => onAssignStudentToTask(task.id, e.target.value || null)}
+                                className="bg-[#0b0e14] border border-[#222b3d] rounded-lg px-2 py-0.5 text-xs text-slate-200 outline-none cursor-pointer hover:border-[#3e6688]"
+                                title="Assign to episode crew member"
                               >
-                                ×
-                              </button>
+                                <option value="">-- Unassigned --</option>
+                                {episodeCrewMembers.map(u => (
+                                  <option key={u.username} value={u.username}>
+                                    @{u.username} ({u.department})
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span>Assignee: <strong className="text-white">@{task.assigned_to || 'unassigned'}</strong></span>
                             )}
                           </div>
                           <span className="text-[11px] font-mono text-slate-400">
@@ -704,16 +719,22 @@ export function EpisodeDetailView({
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Assignee</label>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">Assignee (Episode Crew Only)</label>
                     <select
                       value={newTaskAssignee}
                       onChange={(e) => setNewTaskAssignee(e.target.value)}
-                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none"
+                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
                     >
                       <option value="">-- Unassigned --</option>
-                      {users.map(u => (
-                        <option key={u.username} value={u.username}>{u.name || `@${u.username}`}</option>
-                      ))}
+                      {episodeCrewMembers.length === 0 ? (
+                        <option value="" disabled>No crew assigned to this episode yet</option>
+                      ) : (
+                        episodeCrewMembers.map(u => (
+                          <option key={u.username} value={u.username}>
+                            {u.name || `@${u.username}`} ({u.department})
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
                 </div>
@@ -795,17 +816,26 @@ export function EpisodeDetailView({
                   </select>
                 </div>
 
-                {/* Quick-Pick Recommended Students for this role */}
+                {/* Quick-Pick Recommended Students for this specific role */}
                 <div>
                   <label className="text-xs font-semibold text-slate-300 block mb-1.5">
                     Quick Assign (Students in {selectedCrewDept})
                   </label>
-                  <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-[#0b0e14] border border-[#222b3d] rounded-xl">
-                    {users
-                      .filter(u => u.role === 'Member')
-                      .sort((a, b) => (a.department === selectedCrewDept ? -1 : 1))
-                      .map(u => {
-                        const isMatch = u.department?.toLowerCase() === selectedCrewDept.toLowerCase();
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-[#0b0e14] border border-[#222b3d] rounded-xl">
+                    {(() => {
+                      const deptStudents = users.filter(
+                        u => u.role === 'Member' && u.department?.trim().toLowerCase() === selectedCrewDept.trim().toLowerCase()
+                      );
+
+                      if (deptStudents.length === 0) {
+                        return (
+                          <span className="text-xs text-slate-500 italic p-2 block w-full text-center">
+                            No registered students in "{selectedCrewDept}" department. Select from full roster below.
+                          </span>
+                        );
+                      }
+
+                      return deptStudents.map(u => {
                         const isAlreadyInRole = (crewMap[selectedCrewDept] || []).includes(u.username);
 
                         return (
@@ -814,15 +844,13 @@ export function EpisodeDetailView({
                             type="button"
                             disabled={isAlreadyInRole}
                             onClick={() => handleAddCrewMember(selectedCrewDept, u.username)}
-                            className={`text-[11px] font-mono px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                            className={`text-[11px] font-mono px-2.5 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer ${
                               isAlreadyInRole
                                 ? 'bg-[#181e2b] text-slate-600 border-[#222b3d] cursor-not-allowed opacity-50'
-                                : isMatch
-                                ? 'bg-[#3e6688]/20 hover:bg-[#3e6688] text-white border-[#3e6688]/60 shadow-sm'
-                                : 'bg-[#181e2b] hover:bg-[#222b3d] text-slate-300 border-[#222b3d]'
+                                : 'bg-[#3e6688]/20 hover:bg-[#3e6688] text-white border-[#3e6688]/60 shadow-sm'
                             }`}
                           >
-                            <span>{u.name || `@${u.username}`}</span>
+                            <span className="font-semibold">{u.name || `@${u.username}`}</span>
                             {isAlreadyInRole ? (
                               <span className="text-[9px] text-slate-500 font-sans">(Added)</span>
                             ) : (
@@ -830,7 +858,8 @@ export function EpisodeDetailView({
                             )}
                           </button>
                         );
-                      })}
+                      });
+                    })()}
                   </div>
                 </div>
 

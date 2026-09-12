@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   History, Download, Search, Filter, Activity, 
-  CheckCircle2, AlertCircle, RotateCcw, UserPlus, Users, Radio, Shield, Tag 
+  CheckCircle2, AlertCircle, RotateCcw, UserPlus, Users, Radio, Shield, Tag, Trash2, Calendar, Clock 
 } from 'lucide-react';
 import { AuditLog, Episode, Node, SelfAssessment, AuthorizedUser } from '../types';
 import { supabaseService } from '../lib/supabaseService';
@@ -13,6 +13,16 @@ interface ActivityLogsPanelProps {
   nodes: Node[];
   assessments: SelfAssessment[];
   users: AuthorizedUser[];
+  onClearLogs?: () => Promise<void>;
+  isAdmin?: boolean;
+}
+
+interface DownloadSession {
+  id: string;
+  timestamp: string;
+  label: string;
+  exportType: string;
+  recordCount: number;
 }
 
 export function ActivityLogsPanel({
@@ -20,10 +30,89 @@ export function ActivityLogsPanel({
   episodes,
   nodes,
   assessments,
-  users
+  users,
+  onClearLogs,
+  isAdmin = false
 }: ActivityLogsPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAction, setFilterAction] = useState('All');
+  const [isClearing, setIsClearing] = useState(false);
+
+  // Download History & Filter State
+  const [downloadHistory, setDownloadHistory] = useState<DownloadSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('vibes_download_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [dateFilterMode, setDateFilterMode] = useState<string>('all');
+  const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vibes_download_history', JSON.stringify(downloadHistory));
+    } catch (e) {}
+  }, [downloadHistory]);
+
+  const lastDownload = downloadHistory[0];
+
+  // Resolve Effective Cutoff Date based on Selection
+  const getEffectiveCutoffDate = (): string | undefined => {
+    if (dateFilterMode === 'all') return undefined;
+    if (dateFilterMode === 'last_download') return lastDownload?.timestamp;
+    if (dateFilterMode === '24h') return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    if (dateFilterMode === '7d') return new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    if (dateFilterMode === 'custom') return new Date(customDate).toISOString();
+    
+    // If selecting a specific past download session
+    const match = downloadHistory.find(h => h.id === dateFilterMode);
+    return match ? match.timestamp : undefined;
+  };
+
+  const handleExportAuditLogs = () => {
+    const cutoff = getEffectiveCutoffDate();
+    supabaseService.exportAuditLogsCSV(logs, cutoff);
+
+    const newSession: DownloadSession = {
+      id: `DL-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      label: `Audit Logs Export (${cutoff ? `Since ${new Date(cutoff).toLocaleDateString()}` : 'All Time'})`,
+      exportType: 'Audit Logs',
+      recordCount: logs.length
+    };
+    setDownloadHistory(prev => [newSession, ...prev.slice(0, 19)]);
+  };
+
+  const handleExportEpisodesAndTasks = () => {
+    const cutoff = getEffectiveCutoffDate();
+    supabaseService.exportEpisodesAndTasksCSV(episodes, nodes, cutoff);
+
+    const newSession: DownloadSession = {
+      id: `DL-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      label: `Episodes & Tasks Export (${cutoff ? `Since ${new Date(cutoff).toLocaleDateString()}` : 'All Time'})`,
+      exportType: 'Episodes & Tasks',
+      recordCount: nodes.length
+    };
+    setDownloadHistory(prev => [newSession, ...prev.slice(0, 19)]);
+  };
+
+  const handleClear = async () => {
+    if (!confirm('CAUTION: Are you sure you want to permanently clear all activity telemetry and audit logs? This action cannot be undone.')) {
+      return;
+    }
+    setIsClearing(true);
+    try {
+      if (onClearLogs) await onClearLogs();
+    } catch (e) {
+      alert('Failed to clear audit logs.');
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   const filteredLogs = logs.filter(log => {
     const q = searchQuery.toLowerCase();
@@ -67,10 +156,22 @@ export function ActivityLogsPanel({
           </div>
         </div>
 
-        {/* Action Export Buttons */}
+        {/* Action Clear & Export Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          {isAdmin && (
+            <button
+              onClick={handleClear}
+              disabled={isClearing || logs.length === 0}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-[#883712]/20 hover:bg-[#883712]/40 text-[#fca5a5] border border-[#883712]/50 px-3 py-2 rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              title="Clear all stored audit logs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isClearing ? 'Purging...' : 'CLEAR LOGS'}</span>
+            </button>
+          )}
+
           <button
-            onClick={() => supabaseService.exportAuditLogsCSV(logs)}
+            onClick={handleExportAuditLogs}
             className="flex items-center gap-2 text-xs font-semibold bg-[#3e6688] hover:bg-[#4d7ca6] text-white px-3.5 py-2 rounded-xl transition-all shadow-md cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
@@ -78,13 +179,64 @@ export function ActivityLogsPanel({
           </button>
 
           <button
-            onClick={() => supabaseService.exportEpisodesAndTasksCSV(episodes, nodes)}
+            onClick={handleExportEpisodesAndTasks}
             className="flex items-center gap-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl transition-all shadow-md cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>EXPORT EPISODES & TASKS (.CSV)</span>
           </button>
         </div>
+      </div>
+
+      {/* Date-Filtered Download Control Bar */}
+      <div className="px-5 py-3 border-b border-[#222b3d] bg-[#0e121a] flex flex-wrap justify-between items-center gap-3 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-slate-400 font-mono text-[11px] flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5 text-[#3e6688]" />
+            <span>Export Period:</span>
+          </span>
+
+          <select
+            value={dateFilterMode}
+            onChange={(e) => setDateFilterMode(e.target.value)}
+            className="bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-1.5 text-xs text-white outline-none cursor-pointer focus:border-[#3e6688]"
+          >
+            <option value="all">All Time (Complete History)</option>
+            {lastDownload && (
+              <option value="last_download">
+                Since Last Download ({new Date(lastDownload.timestamp).toLocaleString()})
+              </option>
+            )}
+            <option value="24h">Past 24 Hours</option>
+            <option value="7d">Past 7 Days</option>
+            <option value="custom">Custom Date Cutoff...</option>
+            {downloadHistory.length > 1 && (
+              <optgroup label="Past Download Sessions">
+                {downloadHistory.slice(1, 6).map(h => (
+                  <option key={h.id} value={h.id}>
+                    Since {h.exportType} on {new Date(h.timestamp).toLocaleString()}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+
+          {dateFilterMode === 'custom' && (
+            <input
+              type="date"
+              value={customDate}
+              onChange={(e) => setCustomDate(e.target.value)}
+              className="bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-1 text-xs text-white outline-none focus:border-[#3e6688]"
+            />
+          )}
+        </div>
+
+        {lastDownload && (
+          <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
+            <Clock className="w-3 h-3 text-[#f5c358]" />
+            <span>Last Exported: <strong className="text-slate-200">{new Date(lastDownload.timestamp).toLocaleTimeString()} ({lastDownload.exportType})</strong></span>
+          </div>
+        )}
       </div>
 
       {/* Filter Toolbar */}
@@ -115,6 +267,7 @@ export function ActivityLogsPanel({
             <option value="MEMBER">Roster & Department Moves</option>
             <option value="ASSESSMENT">Self-Assessments</option>
             <option value="EPISODE">Episode Lifecycle</option>
+            <option value="CLEARED">Log Cleared Events</option>
           </select>
         </div>
       </div>
@@ -141,7 +294,6 @@ export function ActivityLogsPanel({
                   {filteredLogs.map(log => {
                     const badge = getEventBadge(log.action);
                     const Icon = badge.icon;
-                    const detailsStr = typeof log.details === 'object' ? JSON.stringify(log.details) : String(log.details);
 
                     return (
                       <tr key={log.id} className="hover:bg-[#181e2b]/50 transition-colors font-mono">
@@ -187,3 +339,4 @@ export function ActivityLogsPanel({
     </div>
   );
 }
+

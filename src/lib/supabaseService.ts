@@ -545,7 +545,21 @@ export const supabaseService = {
     }
   },
 
-  // --- UNIVERSAL CSV EXPORTERS (AI INGESTION READY) ---
+  async clearAuditLogs(): Promise<void> {
+    localStorage.removeItem('vibes_audit_logs');
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const { error } = await supabase
+        .from('news_updates')
+        .delete()
+        .eq('category', 'AuditLog');
+      if (error) throw error;
+    } catch (e) {
+      console.error('Error clearing audit logs:', e);
+    }
+  },
+
+  // --- UNIVERSAL CSV EXPORTERS (AI INGESTION READY WITH DATE FILTERING) ---
   downloadCSV(filename: string, csvContent: string) {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -558,22 +572,30 @@ export const supabaseService = {
     URL.revokeObjectURL(url);
   },
 
-  exportEpisodesAndTasksCSV(episodes: Episode[], nodes: Node[]) {
+  exportEpisodesAndTasksCSV(episodes: Episode[], nodes: Node[], sinceDate?: string) {
     const headers = [
       'Episode ID', 'Episode Title', 'Episode Status', 'Target Release', 'Cast & Crew',
       'Task ID', 'Task Title', 'Department', 'Task Status', 'Review Status', 'Assignee',
       'Planned Start', 'Planned End', 'Actual Start', 'Actual End', 'Teacher Notes'
     ];
 
+    const cutoff = sinceDate ? new Date(sinceDate).getTime() : 0;
     const rows: string[][] = [];
 
     episodes.forEach(ep => {
-      const epNodes = nodes.filter(n => (n.episode_id || 'EP-01') === ep.id);
+      const epNodes = nodes.filter(n => {
+        const matchesEp = (n.episode_id || 'EP-01') === ep.id;
+        if (!matchesEp) return false;
+        if (!cutoff) return true;
+        const taskTime = new Date(n.planned_start || ep.created_at || '').getTime();
+        return taskTime >= cutoff;
+      });
+
       const crewStr = ep.assigned_crew 
         ? Object.entries(ep.assigned_crew).map(([dept, members]) => `${dept}: ${members.join(';')}`).join(' | ')
         : (ep.hosts || '');
 
-      if (epNodes.length === 0) {
+      if (epNodes.length === 0 && (!cutoff || new Date(ep.created_at || ep.target_release_date).getTime() >= cutoff)) {
         rows.push([
           `"${ep.id}"`, `"${ep.title.replace(/"/g, '""')}"`, `"${ep.status}"`, `"${ep.target_release_date}"`, `"${crewStr}"`,
           '""', '""', '""', '""', '""', '""', '""', '""', '""', '""', '""'
@@ -591,10 +613,16 @@ export const supabaseService = {
     });
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    this.downloadCSV(`isha_vibes_episodes_and_tasks_${Date.now()}.csv`, csvContent);
+    const suffix = sinceDate ? `_since_${sinceDate.slice(0, 10)}` : '';
+    this.downloadCSV(`isha_vibes_episodes_and_tasks${suffix}_${Date.now()}.csv`, csvContent);
   },
 
-  exportStudentAssessmentsCSV(assessments: SelfAssessment[]) {
+  exportStudentAssessmentsCSV(assessments: SelfAssessment[], sinceDate?: string) {
+    const cutoff = sinceDate ? new Date(sinceDate).getTime() : 0;
+    const filtered = cutoff 
+      ? assessments.filter(a => new Date(a.submitted_at).getTime() >= cutoff)
+      : assessments;
+
     const headers = [
       'Submission ID', 'Timestamp', 'Username', 'Student Name', 'Department', 'Episode Target',
       'Q1_Collaboration', 'Q2_Storytelling', 'Q3_Technical_Craft', 'Q4_Punctuality',
@@ -602,7 +630,7 @@ export const supabaseService = {
       'Average_Score', 'Open_Reflection_Text'
     ];
 
-    const rows = assessments.map(a => {
+    const rows = filtered.map(a => {
       const qScores = [
         a.scores?.q1 ?? 0,
         a.scores?.q2 ?? 0,
@@ -625,12 +653,18 @@ export const supabaseService = {
     });
 
     const csvContent = [headers.join(','), ...rows].join('\n');
-    this.downloadCSV(`isha_vibes_student_assessments_${Date.now()}.csv`, csvContent);
+    const suffix = sinceDate ? `_since_${sinceDate.slice(0, 10)}` : '';
+    this.downloadCSV(`isha_vibes_student_assessments${suffix}_${Date.now()}.csv`, csvContent);
   },
 
-  exportAuditLogsCSV(logs: AuditLog[]) {
+  exportAuditLogsCSV(logs: AuditLog[], sinceDate?: string) {
+    const cutoff = sinceDate ? new Date(sinceDate).getTime() : 0;
+    const filtered = cutoff 
+      ? logs.filter(l => new Date(l.created_at).getTime() >= cutoff)
+      : logs;
+
     const headers = ['Log ID', 'Timestamp', 'Actor Username', 'Action / Event', 'Entity Type', 'Entity ID', 'Full Event Details'];
-    const rows = logs.map(l => [
+    const rows = filtered.map(l => [
       `"${l.id}"`,
       `"${l.created_at}"`,
       `"${l.username}"`,
@@ -641,7 +675,8 @@ export const supabaseService = {
     ].join(','));
 
     const csvContent = [headers.join(','), ...rows].join('\n');
-    this.downloadCSV(`isha_vibes_audit_telemetry_${Date.now()}.csv`, csvContent);
+    const suffix = sinceDate ? `_since_${sinceDate.slice(0, 10)}` : '';
+    this.downloadCSV(`isha_vibes_audit_telemetry${suffix}_${Date.now()}.csv`, csvContent);
   },
 
   exportTeamRosterCSV(users: AuthorizedUser[]) {

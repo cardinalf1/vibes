@@ -647,6 +647,12 @@ export default function App() {
     supabaseService.deleteDepartment(id).catch(console.error);
   };
 
+  const handleClearAuditLogs = async () => {
+    setAuditLogs([]);
+    await supabaseService.clearAuditLogs();
+    logEvent('LOGS_CLEARED', 'system', null, { cleared_by: authUsername });
+  };
+
   const pendingReviewsCount = nodes.filter(n => n.review_status === 'Pending Review').length;
 
   return (
@@ -734,6 +740,8 @@ export default function App() {
             nodes={nodes}
             assessments={selfAssessments}
             users={authorizedUsers}
+            onClearLogs={handleClearAuditLogs}
+            isAdmin={authRole === 'Admin'}
           />
         )}
 
