@@ -215,7 +215,34 @@ export default function App() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'episodes' }, payload => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const newEp = payload.new as Episode;
+          const rawEp = payload.new as any;
+          // Unpack assigned_crew and pacing_status from department_notes envelope
+          let assignedCrew: Record<string, string[]> = {};
+          let pacing = 'On Track';
+          let deptNotes = rawEp.department_notes || '';
+
+          if (rawEp.department_notes && typeof rawEp.department_notes === 'string') {
+            try {
+              const parsed = JSON.parse(rawEp.department_notes);
+              if (parsed.crew && typeof parsed.crew === 'object') {
+                assignedCrew = parsed.crew;
+              }
+              if (parsed.pacing) {
+                pacing = parsed.pacing;
+              }
+              if (parsed.notes) {
+                deptNotes = parsed.notes;
+              }
+            } catch (e) {}
+          }
+
+          const newEp: Episode = {
+            ...rawEp,
+            department_notes: deptNotes,
+            assigned_crew: Object.keys(assignedCrew).length > 0 ? assignedCrew : (rawEp.assigned_crew || {}),
+            pacing_status: (pacing as any) || 'On Track'
+          };
+
           setEpisodes(prev => {
             const exists = prev.some(e => e.id === newEp.id);
             if (exists) return prev.map(e => e.id === newEp.id ? newEp : e);
