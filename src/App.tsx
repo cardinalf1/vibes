@@ -249,43 +249,57 @@ export default function App() {
         let remoteAuthUsers = await supabaseService.getAuthorizedUsers();
         let remoteAccountRequests = await supabaseService.getAccountRequests();
 
-        // Seed if remote tables are completely empty
-        if (remoteDepts.length === 0 && remoteNodes.length === 0) {
-          console.log('Supabase tables empty, auto-seeding default Isha Vibes dataset...');
+        // Seed individual tables if empty on remote database
+        if (remoteDepts.length === 0) {
           for (const dept of initialDepartments) {
             await supabaseService.upsertDepartment(dept);
           }
+          remoteDepts = await supabaseService.getDepartments();
+        }
+
+        if (remoteNodes.length === 0) {
           for (const node of initialNodes) {
             await supabaseService.upsertNode(node);
           }
+          remoteNodes = await supabaseService.getNodes();
+        }
+
+        if (remoteEpisodes.length === 0) {
           for (const ep of initialEpisodes) {
             await supabaseService.upsertEpisode(ep);
           }
+          remoteEpisodes = await supabaseService.getEpisodes();
+        }
+
+        if (remoteExpenditures.length === 0) {
           for (const exp of defaultExpenditures) {
             await supabaseService.upsertExpenditure(exp);
           }
+          remoteExpenditures = await supabaseService.getExpenditures();
+        }
+
+        if (remoteNews.length === 0) {
           for (const news of defaultNews) {
             await supabaseService.upsertNewsUpdate(news);
           }
+          remoteNews = await supabaseService.getNewsUpdates();
+        }
+
+        if (remoteAuthUsers.length === 0) {
           for (const usr of defaultAuthorizedUsers) {
             await supabaseService.upsertAuthorizedUser(usr);
           }
-
-          remoteDepts = await supabaseService.getDepartments();
-          remoteNodes = await supabaseService.getNodes();
-          remoteEpisodes = await supabaseService.getEpisodes();
-          remoteExpenditures = await supabaseService.getExpenditures();
-          remoteNews = await supabaseService.getNewsUpdates();
           remoteAuthUsers = await supabaseService.getAuthorizedUsers();
         }
 
-        if (remoteDepts.length > 0) setDepartments(remoteDepts);
-        if (remoteNodes.length > 0) setNodes(remoteNodes);
-        if (remoteEpisodes.length > 0) setEpisodes(remoteEpisodes);
-        if (remoteExpenditures.length > 0) setExpenditures(remoteExpenditures);
-        if (remoteNews.length > 0) setNewsUpdates(remoteNews);
-        if (remoteAuthUsers.length > 0) setAuthorizedUsers(remoteAuthUsers);
-        if (remoteAccountRequests.length > 0) setAccountRequests(remoteAccountRequests);
+        // Apply remote database state as source of truth
+        setDepartments(remoteDepts);
+        setNodes(remoteNodes);
+        setEpisodes(remoteEpisodes);
+        setExpenditures(remoteExpenditures);
+        setNewsUpdates(remoteNews);
+        setAuthorizedUsers(remoteAuthUsers);
+        setAccountRequests(remoteAccountRequests);
       } catch (err) {
         console.error('Failed to sync with Supabase on mount:', err);
       } finally {
@@ -296,7 +310,7 @@ export default function App() {
     initSupabase();
   }, [isSupabaseActive]);
 
-  // Real-Time Subscriptions
+  // Real-Time Subscriptions for all modules
   useEffect(() => {
     if (!isSupabaseActive || !supabase) return;
 
@@ -311,7 +325,8 @@ export default function App() {
             return [...prev, newDept];
           });
         } else if (payload.eventType === 'DELETE') {
-          setDepartments(prev => prev.filter(d => d.id !== payload.old.id));
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) setDepartments(prev => prev.filter(d => d.id !== deletedId));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'nodes' }, payload => {
@@ -323,7 +338,8 @@ export default function App() {
             return [...prev, newNode];
           });
         } else if (payload.eventType === 'DELETE') {
-          setNodes(prev => prev.filter(n => n.id !== payload.old.id));
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) setNodes(prev => prev.filter(n => n.id !== deletedId));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'episodes' }, payload => {
@@ -332,22 +348,27 @@ export default function App() {
           setEpisodes(prev => {
             const exists = prev.some(e => e.id === newEp.id);
             if (exists) return prev.map(e => e.id === newEp.id ? newEp : e);
-            return [...prev, newEp];
+            return [newEp, ...prev];
           });
         } else if (payload.eventType === 'DELETE') {
-          setEpisodes(prev => prev.filter(e => e.id !== payload.old.id));
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) setEpisodes(prev => prev.filter(e => e.id !== deletedId));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenditures' }, payload => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const newExp = payload.new as ExpenditureItem;
+          const newExp = {
+            ...(payload.new as ExpenditureItem),
+            cost: Number((payload.new as any).cost) || 0
+          };
           setExpenditures(prev => {
             const exists = prev.some(e => e.id === newExp.id);
             if (exists) return prev.map(e => e.id === newExp.id ? newExp : e);
             return [...prev, newExp];
           });
         } else if (payload.eventType === 'DELETE') {
-          setExpenditures(prev => prev.filter(e => e.id !== payload.old.id));
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) setExpenditures(prev => prev.filter(e => e.id !== deletedId));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'authorized_users' }, payload => {
@@ -367,10 +388,39 @@ export default function App() {
             }
           }
         } else if (payload.eventType === 'DELETE') {
-          setAuthorizedUsers(prev => prev.filter(u => u.id !== payload.old.id));
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) setAuthorizedUsers(prev => prev.filter(u => u.id !== deletedId));
         }
       })
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'account_requests' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const newReq = payload.new;
+          setAccountRequests(prev => {
+            const exists = prev.some(r => r.id === newReq.id);
+            if (exists) return prev.map(r => r.id === newReq.id ? newReq : r);
+            return [newReq, ...prev];
+          });
+        } else if (payload.eventType === 'DELETE') {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) setAccountRequests(prev => prev.filter(r => r.id !== deletedId));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'news_updates' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const newNews = payload.new as NewsUpdate;
+          setNewsUpdates(prev => {
+            const exists = prev.some(n => n.id === newNews.id);
+            if (exists) return prev.map(n => n.id === newNews.id ? newNews : n);
+            return [newNews, ...prev];
+          });
+        } else if (payload.eventType === 'DELETE') {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) setNewsUpdates(prev => prev.filter(n => n.id !== deletedId));
+        }
+      })
+      .subscribe((status) => {
+        console.log('Realtime channel status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);

@@ -439,6 +439,89 @@ export function AccessControlPanel({
               </table>
             </div>
           </div>
+
+          {/* Pending Account Requests Section */}
+          <div className="bg-[#121620] border border-[#222b3d] rounded-2xl overflow-hidden shadow-md">
+            <div className="p-4 border-b border-[#222b3d] bg-[#161b26] flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#c79016]" />
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-white">
+                  PENDING ACCOUNT REQUESTS ({accountRequests.length})
+                </h3>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Student Self-Service Registrations
+              </span>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {accountRequests.length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-500">
+                  No pending access requests. New requests will appear here in real-time.
+                </div>
+              ) : (
+                <div className="divide-y divide-[#222b3d]/60">
+                  {accountRequests.map((req) => (
+                    <div key={req.id} className="py-3 flex flex-wrap justify-between items-center gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white font-mono">@{req.username}</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#c79016]/20 text-[#f5c358] border border-[#c79016]/40">
+                            {req.status || 'Pending'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">{req.notes || 'No notes provided'}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            // Extract department or name from notes if available
+                            let targetDept = departments[0]?.name || 'Research';
+                            let displayName = req.username;
+                            if (req.notes) {
+                              const deptMatch = req.notes.match(/Dept:\s*([^|]+)/i);
+                              if (deptMatch && deptMatch[1]) {
+                                const found = departments.find(d => d.name.toLowerCase() === deptMatch[1].trim().toLowerCase());
+                                if (found) targetDept = found.name;
+                              }
+                              const nameMatch = req.notes.match(/Name:\s*([^|]+)/i);
+                              if (nameMatch && nameMatch[1]) displayName = nameMatch[1].trim();
+                            }
+                            const generatedPass = generateRandomPassword();
+                            onAddAuthorizedUser({
+                              username: req.username.toLowerCase().trim(),
+                              name: displayName,
+                              role: 'Member',
+                              department: targetDept,
+                              password: generatedPass,
+                              notes: req.notes || 'Approved from registration queue',
+                              is_greenlit: true
+                            });
+                            onDeleteAccountRequest(req.id);
+                            alert(`Account approved for @${req.username}!\nInitial Password: ${generatedPass}`);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
+                        >
+                          Approve & Provision
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Decline request for @${req.username}?`)) {
+                              onDeleteAccountRequest(req.id);
+                            }
+                          }}
+                          className="bg-[#181e2b] hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-[#222b3d] text-xs px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -153,17 +153,17 @@ export const supabaseService = {
         .upsert({
           id: node.id,
           title: node.title,
-          description: node.description,
+          description: node.description || '',
           department: node.department,
-          status: node.status,
+          status: node.status || 'To Do',
           priority: node.priority || 'Medium',
-          planned_start: node.planned_start,
-          planned_end: node.planned_end,
-          actual_start: node.actual_start,
-          actual_end: node.actual_end,
-          dependency: node.dependency || null,
-          assigned_to: node.assigned_to || null,
-          assigned_name: node.assigned_name || null
+          planned_start: node.planned_start || new Date().toISOString().split('T')[0],
+          planned_end: node.planned_end || node.planned_start || new Date().toISOString().split('T')[0],
+          actual_start: node.actual_start ? node.actual_start : null,
+          actual_end: node.actual_end ? node.actual_end : null,
+          dependency: node.dependency ? node.dependency : null,
+          assigned_to: node.assigned_to ? node.assigned_to : null,
+          assigned_name: node.assigned_name ? node.assigned_name : null
         });
 
       if (error) throw error;
@@ -202,7 +202,10 @@ export const supabaseService = {
         }
         throw error;
       }
-      return (data || []) as ExpenditureItem[];
+      return (data || []).map(item => ({
+        ...item,
+        cost: Number(item.cost) || 0
+      })) as ExpenditureItem[];
     } catch (e) {
       console.error('Error fetching expenditures:', e);
       return [];
@@ -217,12 +220,12 @@ export const supabaseService = {
         .upsert({
           id: item.id,
           item_name: item.item_name,
-          cost: item.cost,
+          cost: Number(item.cost) || 0,
           category: item.category,
-          needed_by: item.needed_by,
-          status: item.status,
-          pledged_by_username: item.pledged_by_username || null,
-          pledged_by_name: item.pledged_by_name || null
+          needed_by: item.needed_by || new Date().toISOString().split('T')[0],
+          status: item.status || 'Pending',
+          pledged_by_username: item.pledged_by_username ? item.pledged_by_username : null,
+          pledged_by_name: item.pledged_by_name ? item.pledged_by_name : null
         });
 
       if (error) throw error;
