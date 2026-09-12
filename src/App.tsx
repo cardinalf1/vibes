@@ -584,44 +584,110 @@ export default function App() {
   };
 
   const handleAssignStudentToTask = (id: string, username: string | null, mode: 'set' | 'add' | 'remove' = 'add') => {
-    const updated = nodes.map(n => {
-      if (n.id !== id) return n;
-      let currentAssignees = n.assignees && n.assignees.length > 0
-        ? [...n.assignees]
-        : (n.assigned_to ? n.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : []);
+    let modifiedNode: Node | null = null;
+    setNodes(prev => {
+      return prev.map(n => {
+        if (n.id !== id) return n;
+        let currentAssignees = n.assignees && n.assignees.length > 0
+          ? [...n.assignees]
+          : (n.assigned_to ? n.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : []);
 
-      if (mode === 'add' && username) {
-        if (!currentAssignees.includes(username)) currentAssignees.push(username);
-      } else if (mode === 'remove' && username) {
-        currentAssignees = currentAssignees.filter(u => u !== username);
-      } else if (mode === 'set') {
-        currentAssignees = username ? [username] : [];
-      }
+        if (mode === 'add' && username) {
+          if (!currentAssignees.includes(username)) currentAssignees.push(username);
+        } else if (mode === 'remove' && username) {
+          currentAssignees = currentAssignees.filter(u => u !== username);
+        } else if (mode === 'set') {
+          currentAssignees = username ? [username] : [];
+        }
 
-      const assignedNames = currentAssignees.map(u => {
-        const found = authorizedUsers.find(au => au.username === u);
-        return found ? (found.name || u) : u;
+        const assignedNames = currentAssignees.map(u => {
+          const found = authorizedUsers.find(au => au.username === u);
+          return found ? (found.name || u) : u;
+        });
+
+        const updated: Node = {
+          ...n,
+          assignees: currentAssignees,
+          assigned_to: currentAssignees.length > 0 ? currentAssignees.join(',') : null,
+          assigned_name: assignedNames.length > 0 ? assignedNames.join(', ') : null
+        };
+        modifiedNode = updated;
+        return updated;
       });
-
-      return {
-        ...n,
-        assignees: currentAssignees,
-        assigned_to: currentAssignees.length > 0 ? currentAssignees.join(',') : null,
-        assigned_name: assignedNames.length > 0 ? assignedNames.join(', ') : null
-      };
     });
 
-    setNodes(updated);
-    const item = updated.find(n => n.id === id);
-    if (item) {
-      supabaseService.upsertNode(item).catch(console.error);
-      logEvent(username ? 'STUDENT_ASSIGNED_TO_TASK' : 'STUDENT_UNASSIGNED_FROM_TASK', 'task', id, {
+    if (modifiedNode) {
+      supabaseService.upsertNode(modifiedNode).catch(console.error);
+      logEvent(username ? (mode === 'remove' ? 'STUDENT_UNASSIGNED_FROM_TASK' : 'STUDENT_ASSIGNED_TO_TASK') : 'STUDENT_UNASSIGNED_FROM_TASK', 'task', id, {
         assigned_student: username,
-        assignees: item.assignees,
-        task_title: item.title,
-        department: item.department
+        assignees: (modifiedNode as Node).assignees,
+        task_title: (modifiedNode as Node).title,
+        department: (modifiedNode as Node).department
       });
     }
+  };
+
+  const handleMoveStudentBetweenTasks = (fromTaskId: string, toTaskId: string, username: string) => {
+    let fromNode: Node | null = null;
+    let toNode: Node | null = null;
+
+    setNodes(prev => {
+      return prev.map(n => {
+        if (n.id === fromTaskId) {
+          const currentAssignees = (n.assignees && n.assignees.length > 0
+            ? n.assignees
+            : (n.assigned_to ? n.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : [])
+          ).filter(u => u !== username);
+
+          const assignedNames = currentAssignees.map(u => {
+            const found = authorizedUsers.find(au => au.username === u);
+            return found ? (found.name || u) : u;
+          });
+
+          const updated: Node = {
+            ...n,
+            assignees: currentAssignees,
+            assigned_to: currentAssignees.length > 0 ? currentAssignees.join(',') : null,
+            assigned_name: assignedNames.length > 0 ? assignedNames.join(', ') : null
+          };
+          fromNode = updated;
+          return updated;
+        }
+
+        if (n.id === toTaskId) {
+          const currentAssignees = [...(n.assignees && n.assignees.length > 0
+            ? n.assignees
+            : (n.assigned_to ? n.assigned_to.split(',').map(s => s.trim()).filter(Boolean) : [])
+          )];
+          if (!currentAssignees.includes(username)) currentAssignees.push(username);
+
+          const assignedNames = currentAssignees.map(u => {
+            const found = authorizedUsers.find(au => au.username === u);
+            return found ? (found.name || u) : u;
+          });
+
+          const updated: Node = {
+            ...n,
+            assignees: currentAssignees,
+            assigned_to: currentAssignees.length > 0 ? currentAssignees.join(',') : null,
+            assigned_name: assignedNames.length > 0 ? assignedNames.join(', ') : null
+          };
+          toNode = updated;
+          return updated;
+        }
+
+        return n;
+      });
+    });
+
+    if (fromNode) supabaseService.upsertNode(fromNode).catch(console.error);
+    if (toNode) supabaseService.upsertNode(toNode).catch(console.error);
+
+    logEvent('STUDENT_MOVED_BETWEEN_TASKS', 'task', toTaskId, {
+      student: username,
+      from_task: fromTaskId,
+      to_task: toTaskId
+    });
   };
 
   const handleDeleteNode = (id: string) => {
@@ -753,6 +819,7 @@ export default function App() {
               onUpdateTaskStatus={handleUpdateTaskStatus}
               onSubmitTaskForReview={handleSubmitTaskForReview}
               onAssignStudentToTask={handleAssignStudentToTask}
+              onMoveStudentBetweenTasks={handleMoveStudentBetweenTasks}
               onDeleteTask={handleDeleteNode}
             />
           ) : (

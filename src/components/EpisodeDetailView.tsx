@@ -31,6 +31,7 @@ interface EpisodeDetailViewProps {
   onUpdateTaskStatus: (id: string, status: Status) => void;
   onSubmitTaskForReview: (id: string, proofNotes: string) => Promise<void>;
   onAssignStudentToTask: (taskId: string, username: string | null, mode?: 'set' | 'add' | 'remove') => void;
+  onMoveStudentBetweenTasks?: (fromTaskId: string, toTaskId: string, username: string) => void;
   onDeleteTask: (id: string) => void;
 }
 
@@ -45,6 +46,7 @@ export function EpisodeDetailView({
   onUpdateTaskStatus,
   onSubmitTaskForReview,
   onAssignStudentToTask,
+  onMoveStudentBetweenTasks,
   onDeleteTask
 }: EpisodeDetailViewProps) {
   const { user, username: currentUsername, role: authRole, department: userDepartment } = useAuth();
@@ -78,7 +80,9 @@ export function EpisodeDetailView({
 
   // Drag-and-drop state
   const [draggedUsername, setDraggedUsername] = useState<string | null>(null);
+  const [sourceTaskId, setSourceTaskId] = useState<string | null>(null);
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [isDragOverStaffBay, setIsDragOverStaffBay] = useState(false);
 
   // Filter tasks belonging strictly to this episode
   const episodeTasks = nodes.filter(n => (n.episode_id || 'EP-01') === episode.id);
@@ -385,18 +389,47 @@ export function EpisodeDetailView({
 
         {/* Interactive Teacher Drag-and-Drop Staff Bay */}
         {isTeacherOrAdmin && (
-          <div className="bg-[#121620]/90 border border-[#3e6688]/40 rounded-2xl p-4 space-y-2 shadow-lg">
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (isTeacherOrAdmin && draggedUsername) {
+                setIsDragOverStaffBay(true);
+              }
+            }}
+            onDragLeave={() => setIsDragOverStaffBay(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (draggedUsername && sourceTaskId) {
+                onAssignStudentToTask(sourceTaskId, draggedUsername, 'remove');
+              }
+              setDraggedUsername(null);
+              setSourceTaskId(null);
+              setDragOverTaskId(null);
+              setIsDragOverStaffBay(false);
+            }}
+            className={`border rounded-2xl p-4 space-y-2 shadow-lg transition-all ${
+              isDragOverStaffBay
+                ? 'bg-[#162536] border-[#3e6688] ring-2 ring-[#3e6688]/60 shadow-xl'
+                : 'bg-[#121620]/90 border-[#3e6688]/40'
+            }`}
+          >
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <GripVertical className="w-4 h-4 text-[#3e6688]" />
                 <span className="text-xs font-bold uppercase tracking-wider text-white">
-                  Available Student Staff Bay (Drag onto any task card below)
+                  Available Student Staff Bay (Drag students to tasks, or drag back here to unassign)
                 </span>
               </div>
               <span className="text-[10px] text-slate-400 font-mono">
                 {availableStudents.length} Students On Bench
               </span>
             </div>
+
+            {sourceTaskId && (
+              <div className="bg-[#3e6688]/20 border border-dashed border-[#3e6688] rounded-xl p-2.5 text-center text-xs text-[#9dbcd4] font-semibold animate-pulse">
+                ⬇ Drop @{draggedUsername} here to unassign from task and return to available bench
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-2 pt-1">
               {episodeCrewMembers.length === 0 ? (
@@ -412,8 +445,16 @@ export function EpisodeDetailView({
                   <div
                     key={student.username}
                     draggable
-                    onDragStart={() => setDraggedUsername(student.username)}
-                    onDragEnd={() => setDraggedUsername(null)}
+                    onDragStart={() => {
+                      setDraggedUsername(student.username);
+                      setSourceTaskId(null);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedUsername(null);
+                      setSourceTaskId(null);
+                      setDragOverTaskId(null);
+                      setIsDragOverStaffBay(false);
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 cursor-grab active:cursor-grabbing shadow-sm hover:border-[#3e6688] transition-all"
                   >
                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -434,7 +475,7 @@ export function EpisodeDetailView({
                 PRODUCTION DELIVERABLES ({episodeTasks.length})
               </h3>
               <span className="text-[11px] text-slate-400 font-mono">
-                Students can submit tasks in their department for teacher review
+                Students can submit tasks in their department for teacher review • Drag assignees between tasks or to Staff Bay
               </span>
             </div>
 
@@ -469,9 +510,20 @@ export function EpisodeDetailView({
                       onDrop={(e) => {
                         e.preventDefault();
                         if (draggedUsername) {
-                          onAssignStudentToTask(task.id, draggedUsername, 'add');
+                          if (sourceTaskId && sourceTaskId !== task.id) {
+                            if (onMoveStudentBetweenTasks) {
+                              onMoveStudentBetweenTasks(sourceTaskId, task.id, draggedUsername);
+                            } else {
+                              onAssignStudentToTask(sourceTaskId, draggedUsername, 'remove');
+                              onAssignStudentToTask(task.id, draggedUsername, 'add');
+                            }
+                          } else if (!sourceTaskId) {
+                            onAssignStudentToTask(task.id, draggedUsername, 'add');
+                          }
                           setDraggedUsername(null);
+                          setSourceTaskId(null);
                           setDragOverTaskId(null);
+                          setIsDragOverStaffBay(false);
                         }
                       }}
                       className={`bg-[#121620] border rounded-2xl p-5 shadow-lg space-y-4 transition-all ${
@@ -521,12 +573,36 @@ export function EpisodeDetailView({
                               taskAssignees.map(uname => (
                                 <span
                                   key={uname}
-                                  className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#0b0e14] border border-[#222b3d] text-slate-200"
+                                  draggable={isTeacherOrAdmin}
+                                  onDragStart={(e) => {
+                                    if (!isTeacherOrAdmin) return;
+                                    e.stopPropagation();
+                                    setDraggedUsername(uname);
+                                    setSourceTaskId(task.id);
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggedUsername(null);
+                                    setSourceTaskId(null);
+                                    setDragOverTaskId(null);
+                                    setIsDragOverStaffBay(false);
+                                  }}
+                                  className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#0b0e14] border border-[#222b3d] text-slate-200 transition-all ${
+                                    isTeacherOrAdmin
+                                      ? 'cursor-grab active:cursor-grabbing hover:border-[#3e6688] hover:bg-[#181e2b] select-none'
+                                      : ''
+                                  }`}
+                                  title={isTeacherOrAdmin ? `Drag @${uname} to another task or back to Staff Bay` : `@${uname}`}
                                 >
+                                  {isTeacherOrAdmin && (
+                                    <GripVertical className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                                  )}
                                   <span>@{uname}</span>
                                   {isTeacherOrAdmin && (
                                     <button
-                                      onClick={() => onAssignStudentToTask(task.id, uname, 'remove')}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onAssignStudentToTask(task.id, uname, 'remove');
+                                      }}
                                       className="text-slate-500 hover:text-red-400 p-0.5 ml-0.5 cursor-pointer leading-none"
                                       title={`Remove @${uname} from this task`}
                                     >
