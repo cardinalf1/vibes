@@ -91,6 +91,10 @@ export function EpisodeDetailView({
   const episodeTasks = nodes.filter(n => (n.episode_id || 'EP-01') === episode.id);
 
   const handleStartDrag = (e: React.DragEvent, username: string, taskId: string | null) => {
+    if (!isTeacherOrAdmin) {
+      e.preventDefault();
+      return;
+    }
     globalDragPayload = { username, sourceTaskId: taskId };
     e.dataTransfer.setData('text/plain', username);
     e.dataTransfer.setData('application/json', JSON.stringify({ username, sourceTaskId: taskId }));
@@ -108,6 +112,8 @@ export function EpisodeDetailView({
   const handleDropOnStaffBay = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!isTeacherOrAdmin) return;
 
     let uname = globalDragPayload.username;
     let fromTaskId = globalDragPayload.sourceTaskId;
@@ -147,6 +153,8 @@ export function EpisodeDetailView({
   const handleDropOnTask = (e: React.DragEvent, targetTaskId: string) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!isTeacherOrAdmin) return;
 
     let uname = globalDragPayload.username;
     let fromTaskId = globalDragPayload.sourceTaskId;
@@ -498,17 +506,20 @@ export function EpisodeDetailView({
         {isTeacherOrAdmin && (
           <div
             onDragOver={(e) => {
+              if (!isTeacherOrAdmin) return;
               e.preventDefault();
               e.stopPropagation();
               e.dataTransfer.dropEffect = 'move';
               if (!isDragOverStaffBay) setIsDragOverStaffBay(true);
             }}
             onDragEnter={(e) => {
+              if (!isTeacherOrAdmin) return;
               e.preventDefault();
               e.stopPropagation();
               if (!isDragOverStaffBay) setIsDragOverStaffBay(true);
             }}
             onDragLeave={(e) => {
+              if (!isTeacherOrAdmin) return;
               if (e.currentTarget === e.target) {
                 setIsDragOverStaffBay(false);
               }
@@ -545,11 +556,13 @@ export function EpisodeDetailView({
                 availableStudents.map(student => (
                   <div
                     key={student.username}
-                    draggable={true}
+                    draggable={isTeacherOrAdmin}
                     onDragStart={(e) => handleStartDrag(e, student.username, null)}
                     onDragEnd={handleEndDrag}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 cursor-grab active:cursor-grabbing shadow-sm hover:border-[#3e6688] transition-all select-none"
-                    title="Drag to assign to a task"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 shadow-sm transition-all select-none ${
+                      isTeacherOrAdmin ? 'cursor-grab active:cursor-grabbing hover:border-[#3e6688]' : 'cursor-default'
+                    }`}
+                    title={isTeacherOrAdmin ? "Drag to assign to a task" : student.name}
                   >
                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0 pointer-events-none" />
                     <span className="font-semibold pointer-events-none">{student.name || `@${student.username}`}</span>
@@ -587,7 +600,7 @@ export function EpisodeDetailView({
                   const isAssignedToMe = taskAssignees.some(u => u.toLowerCase() === (currentUsername || '').toLowerCase());
                   const isMyDept = userDepartment?.toLowerCase() === task.department.toLowerCase();
                   const canSubmitReview = isTeacherOrAdmin || isAssignedToMe || isMyDept;
-                  const isDragTarget = dragOverTaskId === task.id;
+                  const isDragTarget = isTeacherOrAdmin && dragOverTaskId === task.id;
 
                   // Confidential Feedback Gate:
                   // Only members of this task's department OR assignees OR teachers/admins can see teacher revert notes
@@ -597,22 +610,28 @@ export function EpisodeDetailView({
                     <div
                       key={task.id}
                       onDragOver={(e) => {
+                        if (!isTeacherOrAdmin) return;
                         e.preventDefault();
                         e.stopPropagation();
                         e.dataTransfer.dropEffect = 'move';
                         if (dragOverTaskId !== task.id) setDragOverTaskId(task.id);
                       }}
                       onDragEnter={(e) => {
+                        if (!isTeacherOrAdmin) return;
                         e.preventDefault();
                         e.stopPropagation();
                         if (dragOverTaskId !== task.id) setDragOverTaskId(task.id);
                       }}
                       onDragLeave={(e) => {
+                        if (!isTeacherOrAdmin) return;
                         if (e.currentTarget === e.target) {
                           setDragOverTaskId(null);
                         }
                       }}
-                      onDrop={(e) => handleDropOnTask(e, task.id)}
+                      onDrop={(e) => {
+                        if (!isTeacherOrAdmin) return;
+                        handleDropOnTask(e, task.id);
+                      }}
                       className={`bg-[#121620] border rounded-2xl p-5 shadow-lg space-y-4 transition-all ${
                         isDragTarget 
                           ? 'border-[#3e6688] ring-2 ring-[#3e6688]/40 bg-[#181e2b]' 
@@ -672,19 +691,23 @@ export function EpisodeDetailView({
 
                         <div 
                           onDragOver={(e) => {
+                            if (!isTeacherOrAdmin) return;
                             e.preventDefault();
                             e.stopPropagation();
                             e.dataTransfer.dropEffect = 'move';
                             if (dragOverTaskId !== task.id) setDragOverTaskId(task.id);
                           }}
-                          onDrop={(e) => handleDropOnTask(e, task.id)}
+                          onDrop={(e) => {
+                            if (!isTeacherOrAdmin) return;
+                            handleDropOnTask(e, task.id);
+                          }}
                           className={`flex flex-wrap items-center gap-2 min-h-[42px] p-2.5 bg-[#0b0e14] border rounded-xl transition-all ${
                             isDragTarget ? 'border-[#3e6688] bg-[#141d2a] ring-1 ring-[#3e6688]' : 'border-[#222b3d]'
                           }`}
                         >
                           {taskAssignees.length === 0 ? (
                             <span className="text-xs text-slate-500 italic py-1 px-1">
-                              No students assigned. Drag student pills from the Staff Bay or another task here.
+                              No students assigned. {isTeacherOrAdmin ? 'Drag student pills from the Staff Bay or another task here.' : 'Awaiting teacher task allocation.'}
                             </span>
                           ) : (
                             taskAssignees.map(uname => {
@@ -697,11 +720,13 @@ export function EpisodeDetailView({
                               return (
                                 <div
                                   key={uname}
-                                  draggable={true}
+                                  draggable={isTeacherOrAdmin}
                                   onDragStart={(e) => handleStartDrag(e, uname, task.id)}
                                   onDragEnd={handleEndDrag}
-                                  className="group/pill flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 transition-all select-none shadow-sm cursor-grab active:cursor-grabbing hover:border-[#3e6688]"
-                                  title={isTeacherOrAdmin ? `Drag @${uname} to another task or drag to Staff Bay to unassign` : student.name}
+                                  className={`group/pill flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 transition-all select-none shadow-sm ${
+                                    isTeacherOrAdmin ? 'cursor-grab active:cursor-grabbing hover:border-[#3e6688]' : 'cursor-default'
+                                  }`}
+                                  title={isTeacherOrAdmin ? `Drag @${uname} to another task or drag to Staff Bay to unassign` : (student.name || `@${uname}`)}
                                 >
                                   <div className="w-2 h-2 rounded-full bg-[#3e6688] shrink-0 pointer-events-none" />
                                   <span className="font-semibold pointer-events-none">{student.name || `@${uname}`}</span>

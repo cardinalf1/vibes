@@ -584,6 +584,10 @@ export default function App() {
   };
 
   const handleAssignStudentToTask = (id: string, username: string | null, mode: 'set' | 'add' | 'remove' = 'add') => {
+    if (!isTeacherOrAdmin) {
+      console.warn('Unauthorized: Only teachers and admins can modify student task assignments');
+      return;
+    }
     setNodes(prev => {
       let targetNode: Node | null = null;
       const updated = prev.map(n => {
@@ -630,6 +634,10 @@ export default function App() {
   };
 
   const handleMoveStudentBetweenTasks = (fromTaskId: string, toTaskId: string, username: string) => {
+    if (!isTeacherOrAdmin) {
+      console.warn('Unauthorized: Only teachers and admins can move students between tasks');
+      return;
+    }
     setNodes(prev => {
       let fromNode: Node | null = null;
       let toNode: Node | null = null;
