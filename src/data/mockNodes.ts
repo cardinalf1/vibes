@@ -3,6 +3,7 @@ import { Node } from '../types';
 export const initialNodes: Node[] = [
   { 
     id: 'TSK-101', 
+    episode_id: 'EP-01',
     title: 'Season 1 Theme & Episode Pitch', 
     description: 'Brainstorm core topics, student life discussions, and faculty interview targets.', 
     department: 'Research', 
@@ -11,10 +12,14 @@ export const initialNodes: Node[] = [
     planned_start: '2026-09-01', 
     planned_end: '2026-09-05', 
     actual_start: '2026-09-01', 
-    actual_end: '2026-09-04' 
+    actual_end: '2026-09-04',
+    assigned_to: 'agga__33',
+    assigned_name: 'Agastya Bansal',
+    review_status: 'Approved'
   },
   { 
     id: 'TSK-102', 
+    episode_id: 'EP-01',
     title: 'Faculty Interview Script & Questions', 
     description: 'Draft conversation prompts for the inaugural guest segment.', 
     department: 'Research', 
@@ -23,10 +28,14 @@ export const initialNodes: Node[] = [
     planned_start: '2026-09-06', 
     planned_end: '2026-09-10', 
     actual_start: '2026-09-06', 
-    actual_end: '2026-09-09' 
+    actual_end: '2026-09-09',
+    assigned_to: 'agga__33',
+    assigned_name: 'Agastya Bansal',
+    review_status: 'Approved'
   },
   { 
     id: 'TSK-103', 
+    episode_id: 'EP-01',
     title: 'Studio Mic Check & Rehearsal', 
     description: 'Dry run recording with hosts to test acoustics and input gains.', 
     department: 'Hosts', 
@@ -35,10 +44,16 @@ export const initialNodes: Node[] = [
     planned_start: '2026-09-11', 
     planned_end: '2026-09-14', 
     actual_start: '2026-09-11', 
-    actual_end: null 
+    actual_end: null,
+    assigned_to: 'maya',
+    assigned_name: 'Maya Patel',
+    review_status: 'Pending Review',
+    submitted_by: 'maya',
+    submission_notes: 'Tested dynamic mics with Aarav in Studio B. Levels peak at -6dB.'
   },
   { 
     id: 'TSK-104', 
+    episode_id: 'EP-01',
     title: 'Episode 01 Main Track Recording', 
     description: 'Live studio recording session with guest panel.', 
     department: 'Hosts', 
@@ -47,10 +62,14 @@ export const initialNodes: Node[] = [
     planned_start: '2026-09-15', 
     planned_end: '2026-09-17', 
     actual_start: null, 
-    actual_end: null 
+    actual_end: null,
+    assigned_to: 'aarav',
+    assigned_name: 'Aarav Sharma',
+    review_status: 'None'
   },
   { 
     id: 'TSK-105', 
+    episode_id: 'EP-01',
     title: 'Audio Cleanup & Jingle Integration', 
     description: 'Noise gating, intro/outro music mixdown, and compression.', 
     department: 'Editing', 
@@ -59,10 +78,14 @@ export const initialNodes: Node[] = [
     planned_start: '2026-09-18', 
     planned_end: '2026-09-22', 
     actual_start: null, 
-    actual_end: null 
+    actual_end: null,
+    assigned_to: 'aarav',
+    assigned_name: 'Aarav Sharma',
+    review_status: 'None'
   },
   { 
     id: 'TSK-106', 
+    episode_id: 'EP-01',
     title: 'Faculty Final Review & Sign-Off', 
     description: 'Teacher mentor review of final audio master before public launch.', 
     department: 'Teacher', 
@@ -71,10 +94,14 @@ export const initialNodes: Node[] = [
     planned_start: '2026-09-23', 
     planned_end: '2026-09-25', 
     actual_start: null, 
-    actual_end: null 
+    actual_end: null,
+    assigned_to: 'teacher',
+    assigned_name: 'Faculty Mentor',
+    review_status: 'None'
   },
   { 
     id: 'TSK-107', 
+    episode_id: 'EP-01',
     title: 'Publish Episode 01 & Campus Broadcast', 
     description: 'Upload to stream hosting and share via student newsletter.', 
     department: 'Admin', 
@@ -83,6 +110,9 @@ export const initialNodes: Node[] = [
     planned_start: '2026-09-26', 
     planned_end: '2026-09-27', 
     actual_start: null, 
-    actual_end: null 
+    actual_end: null,
+    assigned_to: 'raghav',
+    assigned_name: 'Raghav',
+    review_status: 'None'
   }
 ];

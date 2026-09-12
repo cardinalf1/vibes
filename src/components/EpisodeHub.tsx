@@ -1,101 +1,93 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Radio, Plus, Edit2, Trash2, Download, Play, Mic, Clock, Calendar, 
-  Tag, UserCheck, FileText, CheckCircle2, Music, Sparkles, ExternalLink, X, Search
+  Radio, Plus, Trash2, Edit2, Play, Users, Calendar, 
+  ExternalLink, Mic, CheckCircle2, Clock, Sparkles, ChevronRight, Search 
 } from 'lucide-react';
-import { Episode, EpisodeStatus } from '../types';
+import { Episode, EpisodeStatus, Department, AuthorizedUser, Node } from '../types';
 
 interface EpisodeHubProps {
   episodes: Episode[];
-  onAddEpisode: (ep: Omit<Episode, 'id' | 'created_at'>) => void;
-  onEditEpisode: (id: string, updatedEp: Episode) => void;
+  nodes: Node[];
+  departments: Department[];
+  users: AuthorizedUser[];
+  onSelectEpisode: (episode: Episode) => void;
+  onAddEpisode: (episode: Omit<Episode, 'id' | 'created_at'>) => void;
+  onEditEpisode: (id: string, updated: Episode) => void;
   onDeleteEpisode: (id: string) => void;
   onUpdateEpisodeStatus: (id: string, status: EpisodeStatus) => void;
   currentRole: string;
 }
 
-const STATUS_CONFIG: Record<EpisodeStatus, { label: string; color: string; bg: string }> = {
-  'Idea': { label: 'Idea & Concept', color: '#9dbcd4', bg: '#3e668820' },
-  'Scripting': { label: 'Scripting', color: '#f5c358', bg: '#c7901620' },
-  'Recording': { label: 'Studio Recording', color: '#fca5a5', bg: '#88371220' },
-  'Editing': { label: 'Audio Mix & Editing', color: '#fdba74', bg: '#b45f0620' },
-  'Review': { label: 'Faculty Review', color: '#f472b6', bg: '#883e6620' },
-  'Published': { label: 'Published & Live', color: '#4ade80', bg: '#16653430' }
-};
+const EPISODE_STATUSES: EpisodeStatus[] = ['Idea', 'Scripting', 'Recording', 'Editing', 'Review', 'Published'];
 
-export function EpisodeHub({ 
-  episodes, 
+export function EpisodeHub({
+  episodes,
+  nodes,
+  departments,
+  users,
+  onSelectEpisode,
   onAddEpisode,
   onEditEpisode,
   onDeleteEpisode,
   onUpdateEpisodeStatus,
-  currentRole 
+  currentRole
 }: EpisodeHubProps) {
-  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingEpisode, setEditingEpisode] = useState<Episode | null>(null);
+  const isTeacherOrAdmin = currentRole === 'Admin' || currentRole === 'Teacher';
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
-  // Modal Form States
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEpisode, setEditingEpisode] = useState<Episode | null>(null);
   const [title, setTitle] = useState('');
   const [targetDate, setTargetDate] = useState(new Date().toISOString().split('T')[0]);
   const [status, setStatus] = useState<EpisodeStatus>('Idea');
   const [hosts, setHosts] = useState('');
   const [guestName, setGuestName] = useState('');
-  const [runtimeMinutes, setRuntimeMinutes] = useState<number | ''>('');
+  const [runtime, setRuntime] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
-  const [departmentNotes, setDepartmentNotes] = useState('');
-  const [audioUrl, setAudioUrl] = useState('');
 
-  const openNewModal = () => {
+  const openCreateModal = () => {
     setEditingEpisode(null);
     setTitle('');
     setTargetDate(new Date().toISOString().split('T')[0]);
     setStatus('Idea');
     setHosts('');
     setGuestName('');
-    setRuntimeMinutes('');
+    setRuntime('');
     setNotes('');
-    setDepartmentNotes('');
-    setAudioUrl('');
     setIsModalOpen(true);
   };
 
-  const openEditModal = (ep: Episode) => {
+  const openEditModal = (ep: Episode, e: React.MouseEvent) => {
+    e.stopPropagation();
     setEditingEpisode(ep);
     setTitle(ep.title);
     setTargetDate(ep.target_release_date);
     setStatus(ep.status);
     setHosts(ep.hosts || '');
     setGuestName(ep.guest_name || '');
-    setRuntimeMinutes(ep.runtime_minutes || '');
+    setRuntime(ep.runtime_minutes || '');
     setNotes(ep.notes || '');
-    setDepartmentNotes(ep.department_notes || '');
-    setAudioUrl(ep.audio_url || '');
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
     if (editingEpisode) {
-      const updated: Episode = {
+      onEditEpisode(editingEpisode.id, {
         ...editingEpisode,
         title: title.trim(),
         target_release_date: targetDate,
         status,
         hosts: hosts.trim() || undefined,
         guest_name: guestName.trim() || undefined,
-        runtime_minutes: typeof runtimeMinutes === 'number' ? runtimeMinutes : undefined,
-        notes: notes.trim() || undefined,
-        department_notes: departmentNotes.trim() || undefined,
-        audio_url: audioUrl.trim() || undefined
-      };
-      onEditEpisode(editingEpisode.id, updated);
-      if (selectedEpisode?.id === editingEpisode.id) setSelectedEpisode(updated);
+        runtime_minutes: typeof runtime === 'number' ? runtime : undefined,
+        notes: notes.trim() || undefined
+      });
     } else {
       onAddEpisode({
         title: title.trim(),
@@ -103,58 +95,33 @@ export function EpisodeHub({
         status,
         hosts: hosts.trim() || undefined,
         guest_name: guestName.trim() || undefined,
-        runtime_minutes: typeof runtimeMinutes === 'number' ? runtimeMinutes : undefined,
+        runtime_minutes: typeof runtime === 'number' ? runtime : undefined,
         notes: notes.trim() || undefined,
-        department_notes: departmentNotes.trim() || undefined,
-        audio_url: audioUrl.trim() || undefined
+        assigned_crew: {
+          'Hosts': [],
+          'Research': [],
+          'Editing': [],
+          'Teacher': ['teacher']
+        }
       });
     }
+
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Delete this episode from the production ledger?')) {
-      onDeleteEpisode(id);
-      if (selectedEpisode?.id === id) setSelectedEpisode(null);
-    }
-  };
-
-  const handleExportCSV = () => {
-    const headers = ['ID', 'Title', 'Status', 'Target Release Date', 'Hosts', 'Guest', 'Runtime (min)', 'Notes'];
-    const rows = episodes.map(ep => [
-      ep.id,
-      `"${ep.title.replace(/"/g, '""')}"`,
-      ep.status,
-      ep.target_release_date,
-      `"${(ep.hosts || '').replace(/"/g, '""')}"`,
-      `"${(ep.guest_name || '').replace(/"/g, '""')}"`,
-      ep.runtime_minutes || '',
-      `"${(ep.notes || '').replace(/"/g, '""')}"`
-    ]);
-
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'isha-vibes-episode-ledger.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   const filteredEpisodes = episodes.filter(ep => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch = 
-      ep.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ep.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (ep.guest_name && ep.guest_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (ep.hosts && ep.hosts.toLowerCase().includes(searchQuery.toLowerCase()));
-    
+      ep.title.toLowerCase().includes(q) ||
+      ep.id.toLowerCase().includes(q) ||
+      (ep.guest_name && ep.guest_name.toLowerCase().includes(q)) ||
+      (ep.hosts && ep.hosts.toLowerCase().includes(q));
     const matchesStatus = statusFilter === 'All' || ep.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   return (
-    <div className="flex flex-col h-full bg-[#0b0e14] border border-[#222b3d] rounded-2xl overflow-hidden shadow-2xl">
+    <div className="flex flex-col h-full bg-[#0b0e14] border border-[#222b3d] rounded-2xl overflow-hidden shadow-2xl font-sans">
       {/* Top Header */}
       <div className="p-5 border-b border-[#222b3d] bg-gradient-to-r from-[#121620] via-[#161b26] to-[#121620] flex flex-wrap justify-between items-center gap-4 shrink-0">
         <div className="flex items-center gap-3">
@@ -163,259 +130,202 @@ export function EpisodeHub({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold tracking-wide text-white font-sans uppercase">
-                EPISODE PRODUCTION LEDGER
+              <h2 className="text-sm font-semibold tracking-wide text-white uppercase font-sans">
+                STUDIO PRODUCTION EPISODES
               </h2>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#181e2b] border border-[#222b3d] text-[#f472b6]">
-                {episodes.length} RECORDED EPISODES
+                {episodes.length} Episodes Tracked
               </span>
             </div>
             <p className="text-xs text-slate-400 font-sans mt-0.5">
-              Track episodes from conceptual idea to final campus broadcast & publishing
+              Click any episode below to enter its full workspace: Department cast, task Gantt roadmap, and QA reviews
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        {isTeacherOrAdmin && (
           <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-2 text-xs font-mono bg-[#181e2b] hover:bg-[#222b3d] text-slate-300 px-3.5 py-2 rounded-xl transition-all border border-[#222b3d] cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            EXPORT LEDGER
-          </button>
-          <button
-            onClick={openNewModal}
-            className="flex items-center gap-2 text-xs font-semibold bg-[#883e66] hover:bg-[#a14878] text-white px-4 py-2 rounded-xl transition-all shadow-md cursor-pointer"
+            onClick={openCreateModal}
+            className="flex items-center gap-2 text-xs font-semibold bg-[#883e66] hover:bg-[#a14b7a] text-white px-4 py-2 rounded-xl transition-all shadow-md shadow-[#883e66]/20 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            NEW EPISODE
+            <span>CREATE EPISODE</span>
           </button>
-        </div>
+        )}
       </div>
 
-      {/* Filter & Search Bar */}
+      {/* Filter Toolbar */}
       <div className="p-4 border-b border-[#222b3d] bg-[#121620]/60 flex flex-wrap justify-between items-center gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-slate-400 font-mono">Filter:</span>
-          {['All', 'Idea', 'Scripting', 'Recording', 'Editing', 'Review', 'Published'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                statusFilter === st
-                  ? 'bg-[#3e6688] text-white'
-                  : 'bg-[#181e2b] text-slate-400 hover:text-white border border-[#222b3d]'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
-
-        <div className="relative min-w-[220px]">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search title, hosts, guests..."
-            className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#3e6688]"
+            placeholder="Search episode title, guest, ID, or hosts..."
+            className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl pl-9 pr-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#883e66]"
           />
         </div>
-      </div>
 
-      {/* Episodes Grid */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredEpisodes.map((ep) => {
-            const stConf = STATUS_CONFIG[ep.status] || STATUS_CONFIG['Idea'];
-
-            return (
-              <div
-                key={ep.id}
-                onClick={() => setSelectedEpisode(ep)}
-                className="bg-[#121620] border border-[#222b3d] hover:border-[#3e6688] rounded-2xl p-5 flex flex-col justify-between gap-4 transition-all shadow-md cursor-pointer group relative"
-              >
-                {/* Action Hover Controls */}
-                <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); openEditModal(ep); }}
-                    className="p-1.5 bg-[#181e2b]/90 backdrop-blur rounded-lg border border-[#222b3d] text-slate-300 hover:text-white hover:border-[#3e6688] transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(ep.id); }}
-                    className="p-1.5 bg-[#181e2b]/90 backdrop-blur rounded-lg border border-[#222b3d] text-slate-300 hover:text-red-400 hover:border-red-900 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Top Details */}
-                <div>
-                  <div className="flex justify-between items-start gap-2 mb-2.5">
-                    <span className="text-xs font-mono font-bold text-[#f472b6] tracking-wider px-2 py-0.5 rounded-md bg-[#883e66]/20 border border-[#883e66]/40">
-                      {ep.id}
-                    </span>
-                    <select
-                      value={ep.status}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        onUpdateEpisodeStatus(ep.id, e.target.value as EpisodeStatus);
-                      }}
-                      className="text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full font-semibold border outline-none cursor-pointer"
-                      style={{
-                        backgroundColor: stConf.bg,
-                        borderColor: `${stConf.color}60`,
-                        color: stConf.color
-                      }}
-                    >
-                      <option value="Idea" className="bg-[#121620] text-slate-200">Idea & Concept</option>
-                      <option value="Scripting" className="bg-[#121620] text-slate-200">Scripting</option>
-                      <option value="Recording" className="bg-[#121620] text-slate-200">Studio Recording</option>
-                      <option value="Editing" className="bg-[#121620] text-slate-200">Audio Mix & Editing</option>
-                      <option value="Review" className="bg-[#121620] text-slate-200">Faculty Review</option>
-                      <option value="Published" className="bg-[#121620] text-slate-200">Published & Live</option>
-                    </select>
-                  </div>
-
-                  <h3 className="text-base font-bold text-white font-sans group-hover:text-[#9dbcd4] transition-colors line-clamp-2">
-                    {ep.title}
-                  </h3>
-
-                  {ep.notes && (
-                    <p className="text-xs text-slate-400 font-sans mt-2 line-clamp-2 leading-relaxed">
-                      {ep.notes}
-                    </p>
-                  )}
-                </div>
-
-                {/* Metadata Pills */}
-                <div className="space-y-2 pt-3 border-t border-[#222b3d]/60">
-                  {ep.guest_name && (
-                    <div className="flex items-center gap-2 text-xs text-slate-300">
-                      <UserCheck className="w-3.5 h-3.5 text-[#c79016] shrink-0" />
-                      <span className="truncate">Guest: <strong className="text-white font-medium">{ep.guest_name}</strong></span>
-                    </div>
-                  )}
-
-                  {ep.hosts && (
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <Mic className="w-3.5 h-3.5 text-[#883e66] shrink-0" />
-                      <span className="truncate">Hosts: {ep.hosts}</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1 font-mono">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>{ep.target_release_date}</span>
-                    </div>
-                    {ep.runtime_minutes && (
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>{ep.runtime_minutes} mins</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">Lifecycle:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white outline-none cursor-pointer"
+          >
+            <option value="All">All Lifecycles</option>
+            {EPISODE_STATUSES.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Detail Modal */}
-      <AnimatePresence>
-        {selectedEpisode && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#121620] border border-[#222b3d] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl"
-            >
-              <div className="p-5 border-b border-[#222b3d] bg-[#161b26] flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-mono font-bold text-[#f472b6] px-2.5 py-1 rounded bg-[#883e66]/20 border border-[#883e66]/40">
-                    {selectedEpisode.id}
-                  </span>
-                  <h3 className="text-base font-bold text-white font-sans">{selectedEpisode.title}</h3>
-                </div>
-                <button
-                  onClick={() => setSelectedEpisode(null)}
-                  className="text-slate-400 hover:text-white p-1"
+      {/* Episode Cards Grid */}
+      <div className="flex-1 overflow-y-auto p-6">
+        {filteredEpisodes.length === 0 ? (
+          <div className="bg-[#121620] border border-dashed border-[#222b3d] rounded-2xl p-12 text-center text-xs text-slate-500">
+            No episodes matching your current search.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {filteredEpisodes.map((ep) => {
+              const epNodes = nodes.filter(n => (n.episode_id || 'EP-01') === ep.id);
+              const completedCount = epNodes.filter(n => n.status === 'Completed').length;
+              const totalCount = epNodes.length;
+              const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+              const crew = ep.assigned_crew || {};
+
+              return (
+                <div
+                  key={ep.id}
+                  onClick={() => onSelectEpisode(ep)}
+                  className="bg-[#121620] border border-[#222b3d] hover:border-[#3e6688] rounded-2xl p-5 shadow-lg flex flex-col justify-between gap-4 transition-all cursor-pointer group hover:scale-[1.005] relative overflow-hidden"
                 >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+                  <div className="space-y-3">
+                    {/* Top Pill Row */}
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#883e66]/20 border border-[#883e66]/40 text-[#f472b6]">
+                          {ep.id}
+                        </span>
 
-              <div className="p-6 space-y-5">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-[#0b0e14] p-3 rounded-xl border border-[#222b3d]">
-                    <span className="text-[10px] font-mono uppercase text-slate-500 block">Status</span>
-                    <span className="text-xs font-bold text-white mt-1 block">{selectedEpisode.status}</span>
+                        <select
+                          onClick={(e) => e.stopPropagation()}
+                          value={ep.status}
+                          onChange={(e) => onUpdateEpisodeStatus(ep.id, e.target.value as EpisodeStatus)}
+                          className="bg-[#0b0e14] border border-[#222b3d] text-slate-200 text-xs rounded-lg px-2.5 py-0.5 font-mono cursor-pointer outline-none hover:border-[#883e66]"
+                        >
+                          {EPISODE_STATUSES.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        {isTeacherOrAdmin && (
+                          <>
+                            <button
+                              onClick={(e) => openEditModal(ep, e)}
+                              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#181e2b]"
+                              title="Edit Episode Details"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`Delete episode "${ep.title}" and its roadmap?`)) {
+                                  onDeleteEpisode(ep.id);
+                                }
+                              }}
+                              className="text-slate-500 hover:text-red-400 p-1 rounded-lg hover:bg-[#181e2b]"
+                              title="Delete Episode"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                        <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                      </div>
+                    </div>
+
+                    {/* Title & Overview */}
+                    <div>
+                      <h3 className="text-base font-bold text-white font-sans group-hover:text-[#9dbcd4] transition-colors leading-snug">
+                        {ep.title}
+                      </h3>
+                      {ep.guest_name && (
+                        <span className="text-xs text-slate-400 font-mono mt-0.5 block">
+                          Guest: <strong className="text-slate-200">{ep.guest_name}</strong>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Progress Bar & Velocity */}
+                    <div className="space-y-1.5 bg-[#0b0e14] border border-[#222b3d] rounded-xl p-3">
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-slate-400 font-mono">Progress Velocity</span>
+                        <span className="text-white font-mono font-bold">
+                          {completedCount} / {totalCount} Tasks ({percent}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-[#181e2b] rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-[#3e6688] via-[#c79016] to-[#33a474] rounded-full transition-all duration-300"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Department Cast & Crew Badges */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-semibold block">
+                        Assigned Cast & Crew Roster:
+                      </span>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {departments.slice(0, 5).map(dept => {
+                          const members = crew[dept.name] || [];
+
+                          return (
+                            <div key={dept.id} className="bg-[#0b0e14] border border-[#222b3d] rounded-lg p-2 text-xs">
+                              <span className="text-[10px] font-mono text-slate-400 block font-semibold">{dept.name}</span>
+                              <div className="truncate text-slate-200 mt-0.5">
+                                {members.length === 0 ? (
+                                  <span className="text-slate-600 text-[11px] italic">Unassigned</span>
+                                ) : (
+                                  members.map(u => `@${u}`).join(', ')
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-[#0b0e14] p-3 rounded-xl border border-[#222b3d]">
-                    <span className="text-[10px] font-mono uppercase text-slate-500 block">Target Drop</span>
-                    <span className="text-xs font-bold text-white mt-1 block">{selectedEpisode.target_release_date}</span>
-                  </div>
-                  <div className="bg-[#0b0e14] p-3 rounded-xl border border-[#222b3d]">
-                    <span className="text-[10px] font-mono uppercase text-slate-500 block">Hosts</span>
-                    <span className="text-xs font-bold text-white mt-1 block truncate">{selectedEpisode.hosts || 'TBD'}</span>
-                  </div>
-                  <div className="bg-[#0b0e14] p-3 rounded-xl border border-[#222b3d]">
-                    <span className="text-[10px] font-mono uppercase text-slate-500 block">Est. Runtime</span>
-                    <span className="text-xs font-bold text-white mt-1 block">{selectedEpisode.runtime_minutes ? `${selectedEpisode.runtime_minutes} mins` : 'TBD'}</span>
+
+                  {/* Bottom Release Date & Entry Banner */}
+                  <div className="flex justify-between items-center pt-3 border-t border-[#222b3d]/60 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-400 font-mono text-[11px]">
+                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Target: <strong className="text-white">{ep.target_release_date}</strong></span>
+                    </div>
+
+                    <span className="text-[#9dbcd4] group-hover:text-white font-semibold flex items-center gap-1 transition-colors">
+                      <span>Open Workspace</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
                   </div>
                 </div>
-
-                {selectedEpisode.notes && (
-                  <div>
-                    <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">Episode Synopsis & Notes</h4>
-                    <p className="text-sm text-slate-200 bg-[#0b0e14] p-3.5 rounded-xl border border-[#222b3d] leading-relaxed">
-                      {selectedEpisode.notes}
-                    </p>
-                  </div>
-                )}
-
-                {selectedEpisode.department_notes && (
-                  <div>
-                    <h4 className="text-xs font-mono uppercase tracking-wider text-[#9dbcd4] mb-1.5">Production Unit Status</h4>
-                    <p className="text-sm text-slate-300 bg-[#3e6688]/10 p-3.5 rounded-xl border border-[#3e6688]/30 leading-relaxed">
-                      {selectedEpisode.department_notes}
-                    </p>
-                  </div>
-                )}
-
-                <div className="pt-3 border-t border-[#222b3d] flex justify-end gap-2">
-                  <button
-                    onClick={() => {
-                      const ep = selectedEpisode;
-                      setSelectedEpisode(null);
-                      openEditModal(ep);
-                    }}
-                    className="px-4 py-2 rounded-xl text-xs font-medium text-white bg-[#3e6688] hover:bg-[#4d7ca6]"
-                  >
-                    Edit Episode
-                  </button>
-                  <button
-                    onClick={() => setSelectedEpisode(null)}
-                    className="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 bg-[#181e2b] border border-[#222b3d]"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </motion.div>
+              );
+            })}
           </div>
         )}
-      </AnimatePresence>
+      </div>
 
-      {/* Create / Edit Modal */}
+      {/* Create / Edit Episode Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -423,130 +333,102 @@ export function EpisodeHub({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#121620] border border-[#222b3d] rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl"
+              className="bg-[#121620] border border-[#222b3d] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-6 space-y-4"
             >
-              <div className="p-5 border-b border-[#222b3d] bg-[#161b26] flex justify-between items-center">
+              <div>
                 <h3 className="text-sm font-bold text-white font-sans uppercase">
-                  {editingEpisode ? `Edit ${editingEpisode.id}` : 'Create New Episode Ledger'}
+                  {editingEpisode ? `Edit ${editingEpisode.id}` : 'Create New Episode Project'}
                 </h3>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="text-slate-400 hover:text-white p-1"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Set target release date, production phase, and initial episode notes
+                </p>
               </div>
 
-              <form onSubmit={handleSave} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+              <form onSubmit={handleSubmit} className="space-y-3.5">
                 <div>
                   <label className="text-xs font-semibold text-slate-300 block mb-1">Episode Title</label>
                   <input
                     type="text"
+                    required
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Navigating Creative Paths: Student Round Table"
-                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#3e6688]"
-                    required
+                    placeholder="e.g. Episode 04: The Student Innovation Summit"
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#883e66]"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Production Status</label>
-                    <select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value as EpisodeStatus)}
-                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#3e6688]"
-                    >
-                      <option value="Idea">Idea & Concept</option>
-                      <option value="Scripting">Scripting</option>
-                      <option value="Recording">Studio Recording</option>
-                      <option value="Editing">Audio Mix & Editing</option>
-                      <option value="Review">Faculty Review</option>
-                      <option value="Published">Published & Live</option>
-                    </select>
-                  </div>
-
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-slate-300 block mb-1">Target Release Date</label>
                     <input
                       type="date"
+                      required
                       value={targetDate}
                       onChange={(e) => setTargetDate(e.target.value)}
-                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
-                      required
+                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
                     />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">Current Lifecycle</label>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as EpisodeStatus)}
+                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none cursor-pointer"
+                    >
+                      {EPISODE_STATUSES.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Hosts</label>
-                    <input
-                      type="text"
-                      value={hosts}
-                      onChange={(e) => setHosts(e.target.value)}
-                      placeholder="e.g. Aarav & Maya"
-                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Guest Spotlight</label>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">Guest Spotlight (Optional)</label>
                     <input
                       type="text"
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
-                      placeholder="e.g. Dr. K. Rao"
-                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
+                      placeholder="e.g. Dean of Students"
+                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Runtime (mins)</label>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">Runtime Estimate (Mins)</label>
                     <input
                       type="number"
-                      value={runtimeMinutes}
-                      onChange={(e) => setRuntimeMinutes(e.target.value ? parseInt(e.target.value) : '')}
+                      value={runtime}
+                      onChange={(e) => setRuntime(e.target.value ? parseInt(e.target.value) : '')}
                       placeholder="30"
-                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
+                      className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">Episode Synopsis</label>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Production Notes & Summary</label>
                   <textarea
+                    rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Key discussion points, topics covered, and student questions..."
-                    rows={3}
-                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-[#3e6688]"
+                    placeholder="Key talking points, research themes, or recording dates..."
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#883e66]"
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">Department & Studio Notes</label>
-                  <input
-                    type="text"
-                    value={departmentNotes}
-                    onChange={(e) => setDepartmentNotes(e.target.value)}
-                    placeholder="e.g. Research script ready. Audio levels set."
-                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
-                  />
-                </div>
-
-                <div className="pt-3 flex justify-end gap-2 border-t border-[#222b3d]">
+                <div className="flex justify-end gap-2 pt-2 border-t border-[#222b3d]">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white bg-[#181e2b] border border-[#222b3d]"
+                    className="px-4 py-2 rounded-xl text-xs text-slate-400 bg-[#181e2b] border border-[#222b3d]"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-[#883e66] hover:bg-[#a14878] shadow-md cursor-pointer"
+                    className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-[#883e66] hover:bg-[#a14b7a] shadow-md cursor-pointer"
                   >
                     {editingEpisode ? 'Save Changes' : 'Create Episode'}
                   </button>

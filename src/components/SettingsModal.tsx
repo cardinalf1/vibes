@@ -119,15 +119,24 @@ CREATE TABLE IF NOT EXISTS nodes (
   assigned_name TEXT
 );
 
-CREATE TABLE IF NOT EXISTS expenditures (
+CREATE TABLE IF NOT EXISTS self_assessments (
   id TEXT PRIMARY KEY,
-  item_name TEXT NOT NULL,
-  cost NUMERIC NOT NULL,
-  category TEXT NOT NULL,
-  needed_by DATE NOT NULL,
-  status TEXT DEFAULT 'Pending',
-  pledged_by_username TEXT,
-  pledged_by_name TEXT,
+  username TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  department TEXT NOT NULL,
+  episode_id TEXT,
+  scores JSONB NOT NULL,
+  reflection_notes TEXT,
+  submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  username TEXT NOT NULL,
+  details JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -153,7 +162,8 @@ ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE authorized_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE episodes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE nodes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE expenditures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE self_assessments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE news_updates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account_requests ENABLE ROW LEVEL SECURITY;
 
@@ -170,8 +180,11 @@ CREATE POLICY "Public Write Episodes" ON episodes FOR ALL USING (true);
 CREATE POLICY "Public Read Nodes" ON nodes FOR SELECT USING (true);
 CREATE POLICY "Public Write Nodes" ON nodes FOR ALL USING (true);
 
-CREATE POLICY "Public Read Expenditures" ON expenditures FOR SELECT USING (true);
-CREATE POLICY "Public Write Expenditures" ON expenditures FOR ALL USING (true);
+CREATE POLICY "Public Read Assessments" ON self_assessments FOR SELECT USING (true);
+CREATE POLICY "Public Write Assessments" ON self_assessments FOR ALL USING (true);
+
+CREATE POLICY "Public Read Logs" ON audit_logs FOR SELECT USING (true);
+CREATE POLICY "Public Write Logs" ON audit_logs FOR ALL USING (true);
 
 CREATE POLICY "Public Read News" ON news_updates FOR SELECT USING (true);
 CREATE POLICY "Public Write News" ON news_updates FOR ALL USING (true);
@@ -189,7 +202,7 @@ VALUES
   ('dept-admin', 'Admin', '#883712', 'Executive management, publishing schedule, and portal administration.')
 ON CONFLICT (name) DO NOTHING;
 
--- 5. Seed Lead Administrative & Faculty Accounts
+-- 5. Seed Lead Accounts
 INSERT INTO authorized_users (id, username, name, role, department, password, notes, is_greenlit)
 VALUES
   ('AUTH-admin', 'admin', 'Lead Admin', 'Admin', 'Admin', 'Cardinal@2026', 'Master Studio Administrator', true),
@@ -205,7 +218,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE departments;
 ALTER PUBLICATION supabase_realtime ADD TABLE authorized_users;
 ALTER PUBLICATION supabase_realtime ADD TABLE episodes;
 ALTER PUBLICATION supabase_realtime ADD TABLE nodes;
-ALTER PUBLICATION supabase_realtime ADD TABLE expenditures;
+ALTER PUBLICATION supabase_realtime ADD TABLE self_assessments;
+ALTER PUBLICATION supabase_realtime ADD TABLE audit_logs;
 ALTER PUBLICATION supabase_realtime ADD TABLE news_updates;
 ALTER PUBLICATION supabase_realtime ADD TABLE account_requests;`;
 

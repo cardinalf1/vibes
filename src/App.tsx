@@ -1,99 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
-import { TopStats } from './components/TopStats';
 import { Header } from './components/Header';
-import { GanttChart } from './components/GanttChart';
-import { NodeList } from './components/NodeList';
-import { NewNodeModal } from './components/NewNodeModal';
 import { EpisodeHub } from './components/EpisodeHub';
+import { EpisodeDetailView } from './components/EpisodeDetailView';
+import { SelfAssessment } from './components/SelfAssessment';
+import { TeacherReviewPanel } from './components/TeacherReviewPanel';
+import { AssessmentReports } from './components/AssessmentReports';
+import { ActivityLogsPanel } from './components/ActivityLogsPanel';
 import { DepartmentManager } from './components/DepartmentManager';
+import { AccessControlPanel } from './components/AccessControlPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
-import { TeamTodos } from './components/TeamTodos';
-import { BudgetLedger } from './components/BudgetLedger';
-import { AccessControlPanel } from './components/AccessControlPanel';
 import { initialNodes } from './data/mockNodes';
 import { initialEpisodes } from './data/mockEpisodes';
 import { 
   Role, Status, Node, Department, Episode, 
-  ExpenditureItem, NewsUpdate, AuthorizedUser, initialDepartments, Priority 
+  AuthorizedUser, initialDepartments, Priority, 
+  SelfAssessment as SelfAssessmentType, AuditLog, EpisodeStatus 
 } from './types';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { supabaseService } from './lib/supabaseService';
 import { useAuth } from './components/AuthGate';
-import { PublicWelcome } from './components/PublicWelcome';
-
-// Initial podcast equipment & studio costs
-const defaultExpenditures: ExpenditureItem[] = [
-  {
-    id: "EXP-101",
-    item_name: "Shure SM7B Dynamic Vocal Microphone (2x Units)",
-    cost: 72000,
-    category: "Equipment",
-    needed_by: "2026-09-10",
-    status: "Purchased",
-    pledged_by_username: null,
-    pledged_by_name: null
-  },
-  {
-    id: "EXP-102",
-    item_name: "Focusrite Scarlett 4i4 USB Audio Interface",
-    cost: 21500,
-    category: "Equipment",
-    needed_by: "2026-09-12",
-    status: "Purchased",
-    pledged_by_username: null,
-    pledged_by_name: null
-  },
-  {
-    id: "EXP-103",
-    item_name: "Acoustic Foam Soundproofing Panels (Studio B)",
-    cost: 14500,
-    category: "Studio & Acoustic",
-    needed_by: "2026-09-15",
-    status: "Purchased",
-    pledged_by_username: null,
-    pledged_by_name: null
-  },
-  {
-    id: "EXP-104",
-    item_name: "Descript & Adobe Audition Annual Education Licences",
-    cost: 18000,
-    category: "Software & Subscriptions",
-    needed_by: "2026-09-20",
-    status: "Pledged",
-    pledged_by_username: null,
-    pledged_by_name: null
-  },
-  {
-    id: "EXP-105",
-    item_name: "Campus Banner & Student Broadcast Posters",
-    cost: 6500,
-    category: "Marketing & Branding",
-    needed_by: "2026-09-25",
-    status: "Pending",
-    pledged_by_username: null,
-    pledged_by_name: null
-  }
-];
-
-const defaultNews: NewsUpdate[] = [
-  {
-    id: "NEWS-101",
-    title: "Isha Vibes Studio Inauguration",
-    content: "Welcome to the official production hub of Isha Vibes! Student hosts and audio editors can now coordinate episode schedules and access recorded masters in real time.",
-    created_at: "2026-09-01",
-    author: "Faculty Mentor",
-    category: "Announcement"
-  },
-  {
-    id: "NEWS-102",
-    title: "Season 1 Pilot Recording Scheduled",
-    content: "Episode 01 recording dry run is scheduled for next Tuesday in Studio B with our guest faculty panel. Research outlines have been locked.",
-    created_at: "2026-09-05",
-    author: "Lead Host",
-    category: "Studio Update"
-  }
-];
 
 const defaultAuthorizedUsers: AuthorizedUser[] = [
   {
@@ -145,18 +71,26 @@ const defaultAuthorizedUsers: AuthorizedUser[] = [
     password: "vibes2026",
     notes: "Sound Design & Post-Production Lead",
     is_greenlit: true
+  },
+  {
+    id: "AUTH-agga__33",
+    username: "agga__33",
+    name: "Agastya Bansal",
+    role: "Member",
+    department: "Research",
+    password: "vibes2026",
+    notes: "Lead Scripting & Topic Researcher",
+    is_greenlit: true
   }
 ];
 
 export default function App() {
   const { isSupabaseActive, role: authRole, user, name: authName, username: authUsername, signOut } = useAuth();
-  const isAdmin = authRole === 'Admin' || authRole === 'Teacher';
-  const [currentRole, setCurrentRole] = useState<string>(authRole || 'Admin');
+  const isTeacherOrAdmin = authRole === 'Admin' || authRole === 'Teacher';
+  const [currentRole, setCurrentRole] = useState<string>(authRole || 'Member');
 
   useEffect(() => {
-    if (authRole) {
-      setCurrentRole(authRole);
-    }
+    if (authRole) setCurrentRole(authRole);
   }, [authRole]);
 
   const userRef = useRef(user);
@@ -164,7 +98,7 @@ export default function App() {
     userRef.current = user;
   }, [user]);
 
-  // Persistent States with localStorage fallbacks
+  // Main Persistent States
   const [departments, setDepartments] = useState<Department[]>(() => {
     const saved = localStorage.getItem('vibes_departments');
     return saved ? JSON.parse(saved) : initialDepartments;
@@ -180,16 +114,6 @@ export default function App() {
     return saved ? JSON.parse(saved) : initialEpisodes;
   });
 
-  const [expenditures, setExpenditures] = useState<ExpenditureItem[]>(() => {
-    const saved = localStorage.getItem('vibes_expenditures');
-    return saved ? JSON.parse(saved) : defaultExpenditures;
-  });
-
-  const [newsUpdates, setNewsUpdates] = useState<NewsUpdate[]>(() => {
-    const saved = localStorage.getItem('vibes_news');
-    return saved ? JSON.parse(saved) : defaultNews;
-  });
-
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthorizedUser[]>(() => {
     const saved = localStorage.getItem('vibes_auth_users');
     return saved ? JSON.parse(saved) : defaultAuthorizedUsers;
@@ -200,122 +124,82 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [simulatedDate, setSimulatedDate] = useState<string>('2026-09-12');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selfAssessments, setSelfAssessments] = useState<SelfAssessmentType[]>(() => {
+    const saved = localStorage.getItem('vibes_self_assessments');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+    const saved = localStorage.getItem('vibes_audit_logs');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Navigation & View States
+  const [activeModule, setActiveModule] = useState<string>('Episodes');
+  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [activeModule, setActiveModule] = useState<string>('Command Center');
-  const [supabaseLoading, setSupabaseLoading] = useState(false);
+  const [simulatedDate, setSimulatedDate] = useState<string>('2026-09-12');
 
-  // Sync state to local storage on changes
-  useEffect(() => {
-    localStorage.setItem('vibes_departments', JSON.stringify(departments));
-  }, [departments]);
-
-  useEffect(() => {
-    localStorage.setItem('vibes_nodes', JSON.stringify(nodes));
-  }, [nodes]);
-
-  useEffect(() => {
-    localStorage.setItem('vibes_episodes', JSON.stringify(episodes));
-  }, [episodes]);
-
-  useEffect(() => {
-    localStorage.setItem('vibes_expenditures', JSON.stringify(expenditures));
-  }, [expenditures]);
-
-  useEffect(() => {
-    localStorage.setItem('vibes_news', JSON.stringify(newsUpdates));
-  }, [newsUpdates]);
-
-  useEffect(() => {
-    localStorage.setItem('vibes_auth_users', JSON.stringify(authorizedUsers));
-  }, [authorizedUsers]);
+  // Sync to local storage
+  useEffect(() => { localStorage.setItem('vibes_departments', JSON.stringify(departments)); }, [departments]);
+  useEffect(() => { localStorage.setItem('vibes_nodes', JSON.stringify(nodes)); }, [nodes]);
+  useEffect(() => { localStorage.setItem('vibes_episodes', JSON.stringify(episodes)); }, [episodes]);
+  useEffect(() => { localStorage.setItem('vibes_auth_users', JSON.stringify(authorizedUsers)); }, [authorizedUsers]);
+  useEffect(() => { localStorage.setItem('vibes_self_assessments', JSON.stringify(selfAssessments)); }, [selfAssessments]);
+  useEffect(() => { localStorage.setItem('vibes_audit_logs', JSON.stringify(auditLogs)); }, [auditLogs]);
 
   // Initial Fetch & Seed from Supabase
   useEffect(() => {
     async function initSupabase() {
-      if (!isSupabaseActive) {
-        setSupabaseLoading(false);
-        return;
-      }
+      if (!isSupabaseActive) return;
       try {
-        setSupabaseLoading(true);
         let remoteDepts = await supabaseService.getDepartments();
         let remoteNodes = await supabaseService.getNodes();
         let remoteEpisodes = await supabaseService.getEpisodes();
-        let remoteExpenditures = await supabaseService.getExpenditures();
-        let remoteNews = await supabaseService.getNewsUpdates();
         let remoteAuthUsers = await supabaseService.getAuthorizedUsers();
         let remoteAccountRequests = await supabaseService.getAccountRequests();
+        let remoteAssessments = await supabaseService.getSelfAssessments();
+        let remoteLogs = await supabaseService.getAuditLogs();
 
-        // Seed individual tables if empty on remote database
+        // Seed individual tables if empty on remote
         if (remoteDepts.length === 0) {
-          for (const dept of initialDepartments) {
-            await supabaseService.upsertDepartment(dept);
-          }
+          for (const dept of initialDepartments) await supabaseService.upsertDepartment(dept);
           remoteDepts = await supabaseService.getDepartments();
         }
-
         if (remoteNodes.length === 0) {
-          for (const node of initialNodes) {
-            await supabaseService.upsertNode(node);
-          }
+          for (const node of initialNodes) await supabaseService.upsertNode(node);
           remoteNodes = await supabaseService.getNodes();
         }
-
         if (remoteEpisodes.length === 0) {
-          for (const ep of initialEpisodes) {
-            await supabaseService.upsertEpisode(ep);
-          }
+          for (const ep of initialEpisodes) await supabaseService.upsertEpisode(ep);
           remoteEpisodes = await supabaseService.getEpisodes();
         }
-
-        if (remoteExpenditures.length === 0) {
-          for (const exp of defaultExpenditures) {
-            await supabaseService.upsertExpenditure(exp);
-          }
-          remoteExpenditures = await supabaseService.getExpenditures();
-        }
-
-        if (remoteNews.length === 0) {
-          for (const news of defaultNews) {
-            await supabaseService.upsertNewsUpdate(news);
-          }
-          remoteNews = await supabaseService.getNewsUpdates();
-        }
-
         if (remoteAuthUsers.length === 0) {
-          for (const usr of defaultAuthorizedUsers) {
-            await supabaseService.upsertAuthorizedUser(usr);
-          }
+          for (const usr of defaultAuthorizedUsers) await supabaseService.upsertAuthorizedUser(usr);
           remoteAuthUsers = await supabaseService.getAuthorizedUsers();
         }
 
-        // Apply remote database state as source of truth
         setDepartments(remoteDepts);
         setNodes(remoteNodes);
         setEpisodes(remoteEpisodes);
-        setExpenditures(remoteExpenditures);
-        setNewsUpdates(remoteNews);
         setAuthorizedUsers(remoteAuthUsers);
         setAccountRequests(remoteAccountRequests);
+        if (remoteAssessments.length > 0) setSelfAssessments(remoteAssessments);
+        if (remoteLogs.length > 0) setAuditLogs(remoteLogs);
       } catch (err) {
-        console.error('Failed to sync with Supabase on mount:', err);
-      } finally {
-        setSupabaseLoading(false);
+        console.error('Failed to sync on mount:', err);
       }
     }
-
     initSupabase();
   }, [isSupabaseActive]);
 
-  // Real-Time Subscriptions for all modules
+  // Real-Time Subscriptions
   useEffect(() => {
     if (!isSupabaseActive || !supabase) return;
 
     const channel = supabase
-      .channel('vibes-realtime-channel')
+      .channel('vibes-realtime-overhaul-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'departments' }, payload => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           const newDept = payload.new as Department;
@@ -325,21 +209,8 @@ export default function App() {
             return [...prev, newDept];
           });
         } else if (payload.eventType === 'DELETE') {
-          const deletedId = (payload.old as any)?.id;
-          if (deletedId) setDepartments(prev => prev.filter(d => d.id !== deletedId));
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'nodes' }, payload => {
-        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const newNode = payload.new as Node;
-          setNodes(prev => {
-            const exists = prev.some(n => n.id === newNode.id);
-            if (exists) return prev.map(n => n.id === newNode.id ? newNode : n);
-            return [...prev, newNode];
-          });
-        } else if (payload.eventType === 'DELETE') {
-          const deletedId = (payload.old as any)?.id;
-          if (deletedId) setNodes(prev => prev.filter(n => n.id !== deletedId));
+          const delId = (payload.old as any)?.id;
+          if (delId) setDepartments(prev => prev.filter(d => d.id !== delId));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'episodes' }, payload => {
@@ -350,25 +221,57 @@ export default function App() {
             if (exists) return prev.map(e => e.id === newEp.id ? newEp : e);
             return [newEp, ...prev];
           });
+          // Update selectedEpisode if currently viewing
+          setSelectedEpisode(curr => curr && curr.id === newEp.id ? newEp : curr);
         } else if (payload.eventType === 'DELETE') {
-          const deletedId = (payload.old as any)?.id;
-          if (deletedId) setEpisodes(prev => prev.filter(e => e.id !== deletedId));
+          const delId = (payload.old as any)?.id;
+          if (delId) {
+            setEpisodes(prev => prev.filter(e => e.id !== delId));
+            setSelectedEpisode(curr => curr && curr.id === delId ? null : curr);
+          }
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenditures' }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'nodes' }, payload => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const newExp = {
-            ...(payload.new as ExpenditureItem),
-            cost: Number((payload.new as any).cost) || 0
+          const newNode = payload.new as Node;
+          // Unpack description envelope if needed
+          let desc = newNode.description || '';
+          let epId = newNode.dependency?.startsWith('EP-') ? newNode.dependency : (newNode.episode_id || 'EP-01');
+          let reviewStatus = 'None';
+          let reviewNotes = null;
+          let submittedBy = null;
+          let submissionNotes = null;
+
+          if (desc.startsWith('{')) {
+            try {
+              const parsed = JSON.parse(desc);
+              desc = parsed.text || '';
+              if (parsed.episode_id) epId = parsed.episode_id;
+              if (parsed.review_status) reviewStatus = parsed.review_status;
+              if (parsed.review_notes) reviewNotes = parsed.review_notes;
+              if (parsed.submitted_by) submittedBy = parsed.submitted_by;
+              if (parsed.submission_notes) submissionNotes = parsed.submission_notes;
+            } catch (e) {}
+          }
+
+          const processedNode: Node = {
+            ...newNode,
+            description: desc,
+            episode_id: epId,
+            review_status: reviewStatus as any,
+            review_notes: reviewNotes,
+            submitted_by: submittedBy,
+            submission_notes: submissionNotes
           };
-          setExpenditures(prev => {
-            const exists = prev.some(e => e.id === newExp.id);
-            if (exists) return prev.map(e => e.id === newExp.id ? newExp : e);
-            return [...prev, newExp];
+
+          setNodes(prev => {
+            const exists = prev.some(n => n.id === processedNode.id);
+            if (exists) return prev.map(n => n.id === processedNode.id ? processedNode : n);
+            return [...prev, processedNode];
           });
         } else if (payload.eventType === 'DELETE') {
-          const deletedId = (payload.old as any)?.id;
-          if (deletedId) setExpenditures(prev => prev.filter(e => e.id !== deletedId));
+          const delId = (payload.old as any)?.id;
+          if (delId) setNodes(prev => prev.filter(n => n.id !== delId));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'authorized_users' }, payload => {
@@ -380,7 +283,6 @@ export default function App() {
             return [newUser, ...prev];
           });
 
-          // If current logged-in user got dormant, log them out
           if (userRef.current?.username && newUser.username?.toLowerCase() === userRef.current.username.toLowerCase()) {
             if (newUser.is_greenlit === false) {
               alert('Your account authorization has been set to dormant. Logging out.');
@@ -388,8 +290,8 @@ export default function App() {
             }
           }
         } else if (payload.eventType === 'DELETE') {
-          const deletedId = (payload.old as any)?.id;
-          if (deletedId) setAuthorizedUsers(prev => prev.filter(u => u.id !== deletedId));
+          const delId = (payload.old as any)?.id;
+          if (delId) setAuthorizedUsers(prev => prev.filter(u => u.id !== delId));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'account_requests' }, payload => {
@@ -401,96 +303,64 @@ export default function App() {
             return [newReq, ...prev];
           });
         } else if (payload.eventType === 'DELETE') {
-          const deletedId = (payload.old as any)?.id;
-          if (deletedId) setAccountRequests(prev => prev.filter(r => r.id !== deletedId));
+          const delId = (payload.old as any)?.id;
+          if (delId) setAccountRequests(prev => prev.filter(r => r.id !== delId));
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'news_updates' }, payload => {
+        // News updates handles self-assessments and audit logs
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const newNews = payload.new as NewsUpdate;
-          setNewsUpdates(prev => {
-            const exists = prev.some(n => n.id === newNews.id);
-            if (exists) return prev.map(n => n.id === newNews.id ? newNews : n);
-            return [newNews, ...prev];
-          });
-        } else if (payload.eventType === 'DELETE') {
-          const deletedId = (payload.old as any)?.id;
-          if (deletedId) setNewsUpdates(prev => prev.filter(n => n.id !== deletedId));
+          const row = payload.new as any;
+          if (row.category === 'SelfAssessment') {
+            let parsed = { scores: {}, reflection_notes: '', department: 'Research', student_name: row.author, episode_id: 'EP-01' };
+            try { parsed = JSON.parse(row.content); } catch (e) {}
+            const item: SelfAssessmentType = {
+              id: row.id,
+              username: row.author,
+              student_name: parsed.student_name || row.title,
+              department: parsed.department || 'Research',
+              episode_id: parsed.episode_id || 'EP-01',
+              scores: parsed.scores || {},
+              reflection_notes: parsed.reflection_notes || '',
+              submitted_at: row.created_at
+            };
+            setSelfAssessments(prev => {
+              const exists = prev.some(a => a.id === item.id);
+              if (exists) return prev.map(a => a.id === item.id ? item : a);
+              return [item, ...prev];
+            });
+          } else if (row.category === 'AuditLog') {
+            let details = {};
+            try { details = JSON.parse(row.content); } catch (e) {}
+            const logItem: AuditLog = {
+              id: row.id,
+              action: row.title,
+              entity_type: (details as any).entity_type || 'system',
+              entity_id: (details as any).entity_id || null,
+              username: row.author,
+              details: details as any,
+              created_at: row.created_at
+            };
+            setAuditLogs(prev => {
+              const exists = prev.some(l => l.id === logItem.id);
+              if (exists) return prev.map(l => l.id === logItem.id ? logItem : l);
+              return [logItem, ...prev];
+            });
+          }
         }
       })
-      .subscribe((status) => {
-        console.log('Realtime channel status:', status);
-      });
+      .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [isSupabaseActive, signOut]);
 
-  // --- Password Management ---
-  const handleUpdateMyPassword = async (newPassword: string) => {
-    const targetUsername = authUsername || user?.username;
-    if (!targetUsername) throw new Error('No active user session detected.');
-    await supabaseService.updateUserPassword(targetUsername, newPassword);
-    setAuthorizedUsers(prev => prev.map(u => 
-      u.username.toLowerCase() === targetUsername.toLowerCase() ? { ...u, password: newPassword } : u
-    ));
+  // --- Handlers & Micro-Event Telemetry Logging ---
+
+  const logEvent = (action: string, entityType: string, entityId: string | null, details: Record<string, any>) => {
+    supabaseService.logAuditEvent(action, entityType, entityId, authUsername || 'system', details).catch(console.warn);
   };
 
-  // --- Department Handlers ---
-  const handleAddDepartment = (deptData: Omit<Department, 'id'>) => {
-    const newDept: Department = {
-      id: `dept-${Date.now()}`,
-      ...deptData,
-      created_at: new Date().toISOString()
-    };
-    setDepartments(prev => [...prev, newDept]);
-    supabaseService.upsertDepartment(newDept).catch(console.error);
-  };
-
-  const handleUpdateDepartment = (dept: Department) => {
-    setDepartments(prev => prev.map(d => d.id === dept.id ? dept : d));
-    supabaseService.upsertDepartment(dept).catch(console.error);
-  };
-
-  const handleDeleteDepartment = (id: string) => {
-    setDepartments(prev => prev.filter(d => d.id !== id));
-    supabaseService.deleteDepartment(id).catch(console.error);
-  };
-
-  // --- Node / Task Handlers ---
-  const handleCreateNode = (nodeData: { 
-    title: string; 
-    description: string; 
-    department: string; 
-    priority: Priority;
-    planned_start: string; 
-    planned_end: string; 
-    dependency?: string;
-    assigned_to?: string | null;
-  }) => {
-    const maxIdNum = nodes.reduce((max, node) => {
-      const match = node.id.match(/^(?:TSK|ND|N)-(\d+)$/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        return num > max ? num : max;
-      }
-      return max;
-    }, 100);
-
-    const newId = `TSK-${String(maxIdNum + 1).padStart(3, '0')}`;
-    const newNode: Node = {
-      id: newId,
-      ...nodeData,
-      status: 'To Do',
-      actual_start: null,
-      actual_end: null,
-    };
-    setNodes(prev => [...prev, newNode]);
-    supabaseService.upsertNode(newNode).catch(console.error);
-  };
-
-  // --- Episode Handlers ---
+  // Episode Handlers
   const handleCreateEpisode = (epData: Omit<Episode, 'id' | 'created_at'>) => {
     const maxEpNum = episodes.reduce((max, ep) => {
       const match = ep.id.match(/^EP-(\d+)$/);
@@ -508,29 +378,79 @@ export default function App() {
     };
     setEpisodes(prev => [newEp, ...prev]);
     supabaseService.upsertEpisode(newEp).catch(console.error);
+    logEvent('EPISODE_CREATED', 'episode', newId, { title: newEp.title, target_date: newEp.target_release_date });
   };
 
   const handleEditEpisode = (id: string, updatedEp: Episode) => {
     setEpisodes(prev => prev.map(e => e.id === id ? updatedEp : e));
+    if (selectedEpisode && selectedEpisode.id === id) setSelectedEpisode(updatedEp);
     supabaseService.upsertEpisode(updatedEp).catch(console.error);
+    logEvent('EPISODE_UPDATED', 'episode', id, { title: updatedEp.title, status: updatedEp.status });
   };
 
   const handleUpdateEpisodeStatus = (id: string, status: EpisodeStatus) => {
     const updated = episodes.map(e => e.id === id ? { ...e, status } : e);
     setEpisodes(updated);
-    const item = updated.find(e => e.id === id);
-    if (item) supabaseService.upsertEpisode(item).catch(console.error);
+    const found = updated.find(e => e.id === id);
+    if (found) {
+      if (selectedEpisode && selectedEpisode.id === id) setSelectedEpisode(found);
+      supabaseService.upsertEpisode(found).catch(console.error);
+      logEvent('EPISODE_STATUS_CHANGED', 'episode', id, { new_status: status });
+    }
   };
 
   const handleDeleteEpisode = (id: string) => {
     setEpisodes(prev => prev.filter(e => e.id !== id));
+    if (selectedEpisode && selectedEpisode.id === id) setSelectedEpisode(null);
     supabaseService.deleteEpisode(id).catch(console.error);
+    logEvent('EPISODE_DELETED', 'episode', id, {});
   };
 
-  const handleUpdateStatus = (id: string, newStatus: Status) => {
-    const updated = nodes.map(node => {
-      if (node.id !== id) return node;
-      const copy = { ...node, status: newStatus };
+  // Node & Review Handlers
+  const handleCreateNode = (taskData: {
+    title: string;
+    description: string;
+    department: string;
+    priority: Priority;
+    planned_start: string;
+    planned_end: string;
+    dependency?: string;
+    assigned_to?: string | null;
+    episode_id?: string;
+  }) => {
+    const newId = `TSK-${Date.now().toString().slice(-4)}`;
+    const newNode: Node = {
+      id: newId,
+      title: taskData.title,
+      description: taskData.description,
+      department: taskData.department,
+      status: 'To Do',
+      priority: taskData.priority,
+      planned_start: taskData.planned_start,
+      planned_end: taskData.planned_end,
+      actual_start: null,
+      actual_end: null,
+      dependency: taskData.dependency,
+      assigned_to: taskData.assigned_to || null,
+      assigned_name: taskData.assigned_to ? authorizedUsers.find(u => u.username === taskData.assigned_to)?.name || taskData.assigned_to : null,
+      episode_id: taskData.episode_id || selectedEpisode?.id || 'EP-01',
+      review_status: 'None'
+    };
+
+    setNodes(prev => [...prev, newNode]);
+    supabaseService.upsertNode(newNode).catch(console.error);
+    logEvent('TASK_CREATED', 'task', newId, {
+      title: newNode.title,
+      department: newNode.department,
+      episode_id: newNode.episode_id,
+      assigned_to: newNode.assigned_to
+    });
+  };
+
+  const handleUpdateTaskStatus = (id: string, newStatus: Status) => {
+    const updated = nodes.map(n => {
+      if (n.id !== id) return n;
+      const copy = { ...n, status: newStatus };
       if (newStatus === 'In Progress' && !copy.actual_start) copy.actual_start = simulatedDate;
       if (newStatus === 'Completed' && !copy.actual_end) {
         if (!copy.actual_start) copy.actual_start = simulatedDate;
@@ -539,52 +459,123 @@ export default function App() {
       return copy;
     });
     setNodes(updated);
-    const modified = updated.find(n => n.id === id);
-    if (modified) supabaseService.upsertNode(modified).catch(console.error);
+    const item = updated.find(n => n.id === id);
+    if (item) {
+      supabaseService.upsertNode(item).catch(console.error);
+      logEvent('TASK_STATUS_CHANGED', 'task', id, { new_status: newStatus, department: item.department });
+    }
+  };
+
+  const handleSubmitTaskForReview = async (id: string, proofNotes: string) => {
+    const updated = nodes.map(n => {
+      if (n.id !== id) return n;
+      return {
+        ...n,
+        review_status: 'Pending Review' as const,
+        submitted_by: authUsername || 'student',
+        submission_notes: proofNotes
+      };
+    });
+    setNodes(updated);
+    const item = updated.find(n => n.id === id);
+    if (item) {
+      await supabaseService.upsertNode(item);
+      logEvent('TASK_SUBMITTED_FOR_REVIEW', 'task', id, {
+        task_title: item.title,
+        department: item.department,
+        episode_id: item.episode_id,
+        notes: proofNotes
+      });
+    }
+  };
+
+  const handleApproveTask = async (id: string) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const updated = nodes.map(n => {
+      if (n.id !== id) return n;
+      return {
+        ...n,
+        status: 'Completed' as const,
+        review_status: 'Approved' as const,
+        actual_end: todayStr
+      };
+    });
+    setNodes(updated);
+    const item = updated.find(n => n.id === id);
+    if (item) {
+      await supabaseService.upsertNode(item);
+      logEvent('TASK_APPROVED', 'task', id, {
+        task_title: item.title,
+        department: item.department,
+        episode_id: item.episode_id
+      });
+    }
+  };
+
+  const handleRevertTask = async (id: string, feedbackNotes: string) => {
+    const updated = nodes.map(n => {
+      if (n.id !== id) return n;
+      return {
+        ...n,
+        status: 'In Progress' as const,
+        review_status: 'Reverted' as const,
+        review_notes: feedbackNotes
+      };
+    });
+    setNodes(updated);
+    const item = updated.find(n => n.id === id);
+    if (item) {
+      await supabaseService.upsertNode(item);
+      logEvent('TASK_REVERTED', 'task', id, {
+        task_title: item.title,
+        target_department: item.department,
+        episode_id: item.episode_id,
+        notes: feedbackNotes
+      });
+    }
+  };
+
+  const handleAssignStudentToTask = (id: string, username: string | null) => {
+    const assignedUser = username ? authorizedUsers.find(u => u.username === username) : null;
+    const updated = nodes.map(n => {
+      if (n.id !== id) return n;
+      return {
+        ...n,
+        assigned_to: username,
+        assigned_name: assignedUser ? assignedUser.name || username : null
+      };
+    });
+    setNodes(updated);
+    const item = updated.find(n => n.id === id);
+    if (item) {
+      supabaseService.upsertNode(item).catch(console.error);
+      logEvent(username ? 'STUDENT_ASSIGNED_TO_TASK' : 'STUDENT_UNASSIGNED_FROM_TASK', 'task', id, {
+        assigned_student: username,
+        task_title: item.title,
+        department: item.department
+      });
+    }
   };
 
   const handleDeleteNode = (id: string) => {
     setNodes(prev => prev.filter(n => n.id !== id));
     supabaseService.deleteNode(id).catch(console.error);
+    logEvent('TASK_DELETED', 'task', id, {});
   };
 
-  const handleAssignTodo = (id: string, assignedTo: string | null) => {
-    const updated = nodes.map(n => n.id === id ? { ...n, assigned_to: assignedTo } : n);
-    setNodes(updated);
-    const modified = updated.find(n => n.id === id);
-    if (modified) supabaseService.upsertNode(modified).catch(console.error);
+  // Self-Assessment Submission Handler
+  const handleSubmitAssessment = async (assessment: Omit<SelfAssessmentType, 'id' | 'submitted_at'>) => {
+    await supabaseService.submitSelfAssessment(assessment);
+    const updatedList = await supabaseService.getSelfAssessments();
+    setSelfAssessments(updatedList);
+    logEvent('ASSESSMENT_SUBMITTED', 'self_assessment', assessment.username, {
+      student_name: assessment.student_name,
+      department: assessment.department,
+      episode_id: assessment.episode_id
+    });
   };
 
-  const handleEditTodo = (id: string, updatedTodo: Node) => {
-    setNodes(prev => prev.map(n => n.id === id ? updatedTodo : n));
-    supabaseService.upsertNode(updatedTodo).catch(console.error);
-  };
-
-  // --- Budget / Expenditure Handlers ---
-  const handleAddExpenditure = (itemData: Omit<ExpenditureItem, 'id' | 'pledged_by_username' | 'pledged_by_name'>) => {
-    const newItem: ExpenditureItem = {
-      id: `EXP-${Date.now()}`,
-      ...itemData,
-      pledged_by_username: null,
-      pledged_by_name: null
-    };
-    setExpenditures(prev => [...prev, newItem]);
-    supabaseService.upsertExpenditure(newItem).catch(console.error);
-  };
-
-  const handleDeleteExpenditure = (id: string) => {
-    setExpenditures(prev => prev.filter(e => e.id !== id));
-    supabaseService.deleteExpenditure(id).catch(console.error);
-  };
-
-  const handleUpdateExpenditureStatus = (id: string, status: ExpenditureItem['status']) => {
-    const updated = expenditures.map(e => e.id === id ? { ...e, status } : e);
-    setExpenditures(updated);
-    const item = updated.find(e => e.id === id);
-    if (item) supabaseService.upsertExpenditure(item).catch(console.error);
-  };
-
-  // --- Access Control Handlers ---
+  // User & Roster Handlers
   const handleAddAuthorizedUser = async (userData: Omit<AuthorizedUser, 'id'>) => {
     const cleanUsername = userData.username.toLowerCase().trim();
     const newUser: AuthorizedUser = {
@@ -593,27 +584,40 @@ export default function App() {
       username: cleanUsername
     };
     setAuthorizedUsers(prev => [newUser, ...prev]);
-    try {
-      await supabaseService.upsertAuthorizedUser(newUser);
-    } catch (err) {
-      console.error('Error adding user:', err);
+    await supabaseService.upsertAuthorizedUser(newUser);
+    logEvent('USER_PROVISIONED', 'user', cleanUsername, { role: newUser.role, department: newUser.department });
+  };
+
+  const handleUpdateAuthorizedUser = (user: AuthorizedUser) => {
+    const prevUser = authorizedUsers.find(u => u.id === user.id);
+    const deptChanged = prevUser && prevUser.department !== user.department;
+    setAuthorizedUsers(prev => prev.map(u => u.id === user.id ? user : u));
+    supabaseService.upsertAuthorizedUser(user).catch(console.error);
+    if (deptChanged) {
+      logEvent('MEMBER_DEPARTMENT_CHANGED', 'user', user.username, {
+        previous_department: prevUser.department,
+        new_department: user.department
+      });
+    } else {
+      logEvent('USER_UPDATED', 'user', user.username, { role: user.role, department: user.department });
     }
   };
 
   const handleDeleteAuthorizedUser = (id: string) => {
+    const user = authorizedUsers.find(u => u.id === id);
     setAuthorizedUsers(prev => prev.filter(u => u.id !== id));
     supabaseService.deleteAuthorizedUser(id).catch(console.error);
+    logEvent('USER_DELETED', 'user', user?.username || id, {});
   };
 
-  const handleUpdateAuthorizedUser = (user: AuthorizedUser) => {
-    setAuthorizedUsers(prev => prev.map(u => u.id === user.id ? user : u));
-    supabaseService.upsertAuthorizedUser(user).catch(console.error);
-  };
-
-  const handleRequestAccount = async (username: string, notes: string) => {
-    await supabaseService.createAccountRequest(username, notes);
-    const reqs = await supabaseService.getAccountRequests();
-    setAccountRequests(reqs);
+  const handleUpdateMyPassword = async (newPassword: string) => {
+    const targetUsername = authUsername || user?.username;
+    if (!targetUsername) throw new Error('No active user session detected.');
+    await supabaseService.updateUserPassword(targetUsername, newPassword);
+    setAuthorizedUsers(prev => prev.map(u => 
+      u.username.toLowerCase() === targetUsername.toLowerCase() ? { ...u, password: newPassword } : u
+    ));
+    logEvent('USER_PASSWORD_CHANGED', 'user', targetUsername, {});
   };
 
   const handleDeleteAccountRequest = (id: string) => {
@@ -621,7 +625,29 @@ export default function App() {
     supabaseService.deleteAccountRequest(id).catch(console.error);
   };
 
-  const activeEpisode = episodes[0] || null;
+  // Department Handlers
+  const handleAddDepartment = (deptData: Omit<Department, 'id'>) => {
+    const newDept: Department = {
+      id: `dept-${Date.now()}`,
+      ...deptData,
+      created_at: new Date().toISOString()
+    };
+    setDepartments(prev => [...prev, newDept]);
+    supabaseService.upsertDepartment(newDept).catch(console.error);
+    logEvent('DEPARTMENT_CREATED', 'department', newDept.name, {});
+  };
+
+  const handleUpdateDepartment = (dept: Department) => {
+    setDepartments(prev => prev.map(d => d.id === dept.id ? dept : d));
+    supabaseService.upsertDepartment(dept).catch(console.error);
+  };
+
+  const handleDeleteDepartment = (id: string) => {
+    setDepartments(prev => prev.filter(d => d.id !== id));
+    supabaseService.deleteDepartment(id).catch(console.error);
+  };
+
+  const pendingReviewsCount = nodes.filter(n => n.review_status === 'Pending Review').length;
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0b0e14] text-[#f1f5f9] font-sans selection:bg-[#3e6688]/40 selection:text-white">
@@ -629,138 +655,125 @@ export default function App() {
         currentRole={currentRole}
         onRoleChange={setCurrentRole}
         activeModule={activeModule}
-        onModuleChange={setActiveModule}
+        onModuleChange={(mod) => {
+          setActiveModule(mod);
+          if (mod !== 'Episodes') setSelectedEpisode(null);
+        }}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenChangePassword={() => setIsPasswordModalOpen(true)}
         isSupabaseActive={isSupabaseActive}
+        pendingReviewCount={pendingReviewsCount}
       />
 
       <main className="flex-1 overflow-hidden p-4 sm:p-6 bg-gradient-to-b from-[#0b0e14] via-[#0e121a] to-[#0b0e14]">
-        {/* 1. Command Center */}
-        {activeModule === 'Command Center' && (
-          <div className="flex flex-col h-full gap-4">
-            <TopStats
-              activeEpisode={activeEpisode}
+        {/* 1. Episode Hub / Episode Detail View */}
+        {activeModule === 'Episodes' && (
+          selectedEpisode ? (
+            <EpisodeDetailView
+              episode={selectedEpisode}
               nodes={nodes}
               departments={departments}
-              memberCount={authorizedUsers.length}
+              users={authorizedUsers}
+              onBack={() => setSelectedEpisode(null)}
+              onUpdateEpisode={handleEditEpisode}
+              onCreateTask={handleCreateNode}
+              onUpdateTaskStatus={handleUpdateTaskStatus}
+              onSubmitTaskForReview={handleSubmitTaskForReview}
+              onAssignStudentToTask={handleAssignStudentToTask}
+              onDeleteTask={handleDeleteNode}
             />
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
-              <div className="lg:col-span-2 h-full min-h-0">
-                <GanttChart 
-                  nodes={nodes} 
-                  departments={departments}
-                  simulatedDate={simulatedDate} 
-                />
-              </div>
-              <div className="h-full min-h-0">
-                <NodeList
-                  nodes={nodes}
-                  currentRole={currentRole}
-                  onUpdateStatus={handleUpdateStatus}
-                  onDeleteNode={handleDeleteNode}
-                  onOpenCreateModal={() => setIsModalOpen(true)}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 2. Episode Production Ledger */}
-        {activeModule === 'Episodes' && (
-          <div className="h-full">
+          ) : (
             <EpisodeHub
               episodes={episodes}
+              nodes={nodes}
+              departments={departments}
+              users={authorizedUsers}
+              onSelectEpisode={(ep) => setSelectedEpisode(ep)}
               onAddEpisode={handleCreateEpisode}
               onEditEpisode={handleEditEpisode}
               onDeleteEpisode={handleDeleteEpisode}
               onUpdateEpisodeStatus={handleUpdateEpisodeStatus}
               currentRole={currentRole}
             />
-          </div>
+          )
         )}
 
-        {/* 3. Departments & Member Roster */}
-        {activeModule === 'Departments & Roster' && (
-          <div className="h-full">
-            <DepartmentManager
-              departments={departments}
-              users={authorizedUsers}
-              onAddDepartment={handleAddDepartment}
-              onUpdateDepartment={handleUpdateDepartment}
-              onDeleteDepartment={handleDeleteDepartment}
-              onAddUser={handleAddAuthorizedUser}
-              onUpdateUser={handleUpdateAuthorizedUser}
-              onDeleteUser={handleDeleteAuthorizedUser}
-              currentRole={authRole}
-            />
-          </div>
+        {/* 2. Self-Assessment (16personalities-Style Quiz) */}
+        {activeModule === 'Self-Assessment' && (
+          <SelfAssessment
+            episodes={episodes}
+            pastAssessments={selfAssessments}
+            onSubmitAssessment={handleSubmitAssessment}
+          />
         )}
 
-        {/* 4. Action Items & To-Dos */}
-        {activeModule === 'To-Dos' && (
-          <div className="h-full overflow-y-auto">
-            <TeamTodos
-              nodes={nodes}
-              authorizedUsers={authorizedUsers}
-              departments={departments}
-              currentRole={currentRole}
-              onAddTodo={(todo) => handleCreateNode({ ...todo, priority: 'Medium' })}
-              onUpdateStatus={handleUpdateStatus}
-              onDeleteTodo={handleDeleteNode}
-              onAssignTodo={handleAssignTodo}
-              onEditTodo={handleEditTodo}
-              isAdmin={isAdmin}
-            />
-          </div>
+        {/* 3. Teacher QA Review Queue */}
+        {activeModule === 'Review Queue' && isTeacherOrAdmin && (
+          <TeacherReviewPanel
+            nodes={nodes}
+            episodes={episodes}
+            departments={departments}
+            onApproveTask={handleApproveTask}
+            onRevertTask={handleRevertTask}
+          />
         )}
 
-        {/* 5. Budget & Studio Costs */}
-        {activeModule === 'Budget & Studio' && (
-          <div className="h-full">
-            <BudgetLedger
-              expenditures={expenditures}
-              onAddExpenditure={handleAddExpenditure}
-              onDeleteExpenditure={handleDeleteExpenditure}
-              onUpdateStatus={handleUpdateExpenditureStatus}
-              isAdmin={isAdmin}
-            />
-          </div>
+        {/* 4. Assessment Reports (Teacher View) */}
+        {activeModule === 'Assessment Reports' && isTeacherOrAdmin && (
+          <AssessmentReports
+            assessments={selfAssessments}
+            episodes={episodes}
+          />
         )}
 
-        {/* 6. Access Control Panel */}
-        {activeModule === 'Access Control' && isAdmin && (
-          <div className="h-full">
-            <AccessControlPanel
-              authorizedUsers={authorizedUsers}
-              onAddAuthorizedUser={handleAddAuthorizedUser}
-              onDeleteAuthorizedUser={handleDeleteAuthorizedUser}
-              onUpdateAuthorizedUser={handleUpdateAuthorizedUser}
-              accountRequests={accountRequests}
-              onDeleteAccountRequest={handleDeleteAccountRequest}
-              departments={departments}
-            />
-          </div>
+        {/* 5. Telemetry & Logs */}
+        {activeModule === 'Telemetry & Logs' && isTeacherOrAdmin && (
+          <ActivityLogsPanel
+            logs={auditLogs}
+            episodes={episodes}
+            nodes={nodes}
+            assessments={selfAssessments}
+            users={authorizedUsers}
+          />
+        )}
+
+        {/* 6. Departments & Roster */}
+        {activeModule === 'Departments & Roster' && isTeacherOrAdmin && (
+          <DepartmentManager
+            departments={departments}
+            users={authorizedUsers}
+            onAddDepartment={handleAddDepartment}
+            onUpdateDepartment={handleUpdateDepartment}
+            onDeleteDepartment={handleDeleteDepartment}
+            onAddUser={handleAddAuthorizedUser}
+            onUpdateUser={handleUpdateAuthorizedUser}
+            onDeleteUser={handleDeleteAuthorizedUser}
+            currentRole={authRole}
+          />
+        )}
+
+        {/* 7. Access Control Panel */}
+        {activeModule === 'Access Control' && isTeacherOrAdmin && (
+          <AccessControlPanel
+            authorizedUsers={authorizedUsers}
+            onAddAuthorizedUser={handleAddAuthorizedUser}
+            onDeleteAuthorizedUser={handleDeleteAuthorizedUser}
+            onUpdateAuthorizedUser={handleUpdateAuthorizedUser}
+            accountRequests={accountRequests}
+            onDeleteAccountRequest={handleDeleteAccountRequest}
+            departments={departments}
+          />
         )}
       </main>
 
-      {/* Self-Service Change Password Modal */}
+      {/* Change Password Modal */}
       <ChangePasswordModal
         isOpen={isPasswordModalOpen}
         onClose={() => setIsPasswordModalOpen(false)}
         onUpdatePassword={handleUpdateMyPassword}
       />
 
-      {/* Task Creation Modal */}
-      <NewNodeModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onCreate={handleCreateNode}
-        existingNodes={nodes}
-        departments={departments}
-      />
-
-      {/* Studio & Supabase Settings Modal */}
+      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -768,12 +781,12 @@ export default function App() {
         simulatedDate={simulatedDate}
         onDateChange={setSimulatedDate}
         onExport={() => {
-          const data = { departments, nodes, episodes, expenditures, newsUpdates, authorizedUsers };
+          const data = { departments, nodes, episodes, authorizedUsers, selfAssessments, auditLogs };
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.download = 'isha-vibes-state-backup.json';
+          link.download = `isha-vibes-full-backup-${Date.now()}.json`;
           link.click();
         }}
         onImport={(file) => {
@@ -784,7 +797,7 @@ export default function App() {
               if (data.departments) setDepartments(data.departments);
               if (data.nodes) setNodes(data.nodes);
               if (data.episodes) setEpisodes(data.episodes);
-              if (data.expenditures) setExpenditures(data.expenditures);
+              if (data.authorizedUsers) setAuthorizedUsers(data.authorizedUsers);
               alert('State restored successfully!');
             } catch (err) {
               alert('Invalid state backup file.');

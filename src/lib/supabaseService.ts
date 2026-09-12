@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
-import { Node, Episode, ExpenditureItem, NewsUpdate, AuthorizedUser, Department } from '../types';
+import { Node, Episode, AuthorizedUser, Department, SelfAssessment, AuditLog } from '../types';
 
 export const supabaseService = {
   // --- Departments ---
@@ -12,10 +12,7 @@ export const supabaseService = {
         .order('name', { ascending: true });
 
       if (error) {
-        if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
-          console.warn('Table "departments" does not exist yet.');
-          return [];
-        }
+        if (error.code === 'PGRST116' || error.message.includes('does not exist')) return [];
         throw error;
       }
       return (data || []) as Department[];
@@ -59,7 +56,7 @@ export const supabaseService = {
     }
   },
 
-  // --- Episodes (Podcast Audio Tracker) ---
+  // --- Episodes (Master Episode Tracker) ---
   async getEpisodes(): Promise<Episode[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
@@ -69,13 +66,27 @@ export const supabaseService = {
         .order('target_release_date', { ascending: true });
 
       if (error) {
-        if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
-          console.warn('Table "episodes" does not exist yet.');
-          return [];
-        }
+        if (error.code === 'PGRST116' || error.message.includes('does not exist')) return [];
         throw error;
       }
-      return (data || []) as Episode[];
+
+      return (data || []).map(ep => {
+        let assignedCrew = {};
+        if (ep.department_notes && ep.department_notes.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(ep.department_notes);
+            if (parsed && typeof parsed === 'object' && parsed.crew) {
+              assignedCrew = parsed.crew;
+            }
+          } catch (e) {
+            // fallback
+          }
+        }
+        return {
+          ...ep,
+          assigned_crew: Object.keys(assignedCrew).length > 0 ? assignedCrew : (ep.assigned_crew || {})
+        };
+      }) as Episode[];
     } catch (e) {
       console.error('Error fetching episodes:', e);
       return [];
@@ -85,18 +96,25 @@ export const supabaseService = {
   async upsertEpisode(ep: Episode): Promise<void> {
     if (!isSupabaseConfigured || !supabase) return;
     try {
+      // Package assigned_crew safely in department_notes JSON envelope for backward & cloud compatibility
+      const metadataEnvelope = JSON.stringify({
+        notes: ep.department_notes || '',
+        crew: ep.assigned_crew || {},
+        pacing: ep.pacing_status || 'On Track'
+      });
+
       const { error } = await supabase
         .from('episodes')
         .upsert({
           id: ep.id,
           title: ep.title,
-          target_release_date: ep.target_release_date,
+          target_release_date: ep.target_release_date || new Date().toISOString().split('T')[0],
           status: ep.status,
           hosts: ep.hosts || null,
           guest_name: ep.guest_name || null,
-          runtime_minutes: ep.runtime_minutes || null,
+          runtime_minutes: ep.runtime_minutes ? Number(ep.runtime_minutes) : null,
           notes: ep.notes || null,
-          department_notes: ep.department_notes || null,
+          department_notes: metadataEnvelope,
           audio_url: ep.audio_url || null,
           audio_name: ep.audio_name || null,
           created_at: ep.created_at || new Date().toISOString()
@@ -122,7 +140,7 @@ export const supabaseService = {
     }
   },
 
-  // --- Nodes (Podcast Roadmap Tasks) ---
+  // --- Nodes / Tasks (Gantt & Roadmap) ---
   async getNodes(): Promise<Node[]> {
     if (!isSupabaseConfigured || !supabase) return [];
     try {
@@ -132,13 +150,42 @@ export const supabaseService = {
         .order('planned_start', { ascending: true });
 
       if (error) {
-        if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
-          console.warn('Table "nodes" does not exist yet.');
-          return [];
-        }
+        if (error.code === 'PGRST116' || error.message.includes('does not exist')) return [];
         throw error;
       }
-      return (data || []) as Node[];
+
+      return (data || []).map(node => {
+        let desc = node.description || '';
+        let epId = node.dependency?.startsWith('EP-') ? node.dependency : (node.episode_id || 'EP-01');
+        let reviewStatus = 'None';
+        let reviewNotes = null;
+        let submittedBy = null;
+        let submissionNotes = null;
+
+        if (desc.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(desc);
+            desc = parsed.text || '';
+            if (parsed.episode_id) epId = parsed.episode_id;
+            if (parsed.review_status) reviewStatus = parsed.review_status;
+            if (parsed.review_notes) reviewNotes = parsed.review_notes;
+            if (parsed.submitted_by) submittedBy = parsed.submitted_by;
+            if (parsed.submission_notes) submissionNotes = parsed.submission_notes;
+          } catch (e) {
+            // Keep plain string
+          }
+        }
+
+        return {
+          ...node,
+          description: desc,
+          episode_id: epId,
+          review_status: reviewStatus as any,
+          review_notes: reviewNotes,
+          submitted_by: submittedBy,
+          submission_notes: submissionNotes
+        };
+      }) as Node[];
     } catch (e) {
       console.error('Error fetching nodes:', e);
       return [];
@@ -148,12 +195,21 @@ export const supabaseService = {
   async upsertNode(node: Node): Promise<void> {
     if (!isSupabaseConfigured || !supabase) return;
     try {
+      const descEnvelope = JSON.stringify({
+        text: node.description || '',
+        episode_id: node.episode_id || 'EP-01',
+        review_status: node.review_status || 'None',
+        review_notes: node.review_notes || null,
+        submitted_by: node.submitted_by || null,
+        submission_notes: node.submission_notes || null
+      });
+
       const { error } = await supabase
         .from('nodes')
         .upsert({
           id: node.id,
           title: node.title,
-          description: node.description || '',
+          description: descEnvelope,
           department: node.department,
           status: node.status || 'To Do',
           priority: node.priority || 'Medium',
@@ -161,7 +217,7 @@ export const supabaseService = {
           planned_end: node.planned_end || node.planned_start || new Date().toISOString().split('T')[0],
           actual_start: node.actual_start ? node.actual_start : null,
           actual_end: node.actual_end ? node.actual_end : null,
-          dependency: node.dependency ? node.dependency : null,
+          dependency: node.episode_id || node.dependency || null,
           assigned_to: node.assigned_to ? node.assigned_to : null,
           assigned_name: node.assigned_name ? node.assigned_name : null
         });
@@ -186,116 +242,152 @@ export const supabaseService = {
     }
   },
 
-  // --- Expenditures (Budget & Studio Costs) ---
-  async getExpenditures(): Promise<ExpenditureItem[]> {
-    if (!isSupabaseConfigured || !supabase) return [];
-    try {
-      const { data, error } = await supabase
-        .from('expenditures')
-        .select('*')
-        .order('needed_by', { ascending: true });
-
-      if (error) {
-        if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
-          console.warn('Table "expenditures" does not exist yet.');
-          return [];
-        }
-        throw error;
-      }
-      return (data || []).map(item => ({
-        ...item,
-        cost: Number(item.cost) || 0
-      })) as ExpenditureItem[];
-    } catch (e) {
-      console.error('Error fetching expenditures:', e);
-      return [];
+  // --- Self-Assessments (16personalities Likert Scale) ---
+  async getSelfAssessments(): Promise<SelfAssessment[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      const saved = localStorage.getItem('vibes_self_assessments');
+      return saved ? JSON.parse(saved) : [];
     }
-  },
-
-  async upsertExpenditure(item: ExpenditureItem): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) return;
-    try {
-      const { error } = await supabase
-        .from('expenditures')
-        .upsert({
-          id: item.id,
-          item_name: item.item_name,
-          cost: Number(item.cost) || 0,
-          category: item.category,
-          needed_by: item.needed_by || new Date().toISOString().split('T')[0],
-          status: item.status || 'Pending',
-          pledged_by_username: item.pledged_by_username ? item.pledged_by_username : null,
-          pledged_by_name: item.pledged_by_name ? item.pledged_by_name : null
-        });
-
-      if (error) throw error;
-    } catch (e) {
-      console.error('Error upserting expenditure:', e);
-    }
-  },
-
-  async deleteExpenditure(id: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) return;
-    try {
-      const { error } = await supabase
-        .from('expenditures')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-    } catch (e) {
-      console.error('Error deleting expenditure:', e);
-    }
-  },
-
-  // --- News & Announcements ---
-  async getNewsUpdates(): Promise<NewsUpdate[]> {
-    if (!isSupabaseConfigured || !supabase) return [];
     try {
       const { data, error } = await supabase
         .from('news_updates')
         .select('*')
+        .eq('category', 'SelfAssessment')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return (data || []) as NewsUpdate[];
+
+      return (data || []).map(row => {
+        let parsed = { scores: {}, reflection_notes: '', department: 'Research', student_name: row.author, episode_id: 'EP-01' };
+        try {
+          parsed = JSON.parse(row.content);
+        } catch (e) {}
+        return {
+          id: row.id,
+          username: row.author,
+          student_name: parsed.student_name || row.title,
+          department: parsed.department || 'Research',
+          episode_id: parsed.episode_id || 'EP-01',
+          scores: parsed.scores || {},
+          reflection_notes: parsed.reflection_notes || '',
+          submitted_at: row.created_at
+        };
+      });
     } catch (e) {
-      console.error('Error fetching news updates:', e);
+      console.error('Error fetching self assessments:', e);
       return [];
     }
   },
 
-  async upsertNewsUpdate(news: NewsUpdate): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) return;
-    try {
-      const { error } = await supabase
-        .from('news_updates')
-        .upsert({
-          id: news.id,
-          title: news.title,
-          content: news.content,
-          created_at: news.created_at,
-          author: news.author,
-          category: news.category || 'Announcement'
-        });
+  async submitSelfAssessment(assessment: Omit<SelfAssessment, 'id' | 'submitted_at'>): Promise<void> {
+    const id = `SA-${Date.now()}-${assessment.username}`;
+    const payload = {
+      id,
+      title: `${assessment.student_name} (${assessment.department})`,
+      content: JSON.stringify({
+        student_name: assessment.student_name,
+        department: assessment.department,
+        episode_id: assessment.episode_id || null,
+        scores: assessment.scores,
+        reflection_notes: assessment.reflection_notes
+      }),
+      author: assessment.username,
+      category: 'SelfAssessment',
+      created_at: new Date().toISOString()
+    };
 
+    if (!isSupabaseConfigured || !supabase) {
+      const saved = localStorage.getItem('vibes_self_assessments');
+      const list = saved ? JSON.parse(saved) : [];
+      list.unshift({ id, ...assessment, submitted_at: payload.created_at });
+      localStorage.setItem('vibes_self_assessments', JSON.stringify(list));
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('news_updates').upsert(payload);
       if (error) throw error;
     } catch (e) {
-      console.error('Error upserting news update:', e);
+      console.error('Error submitting self assessment:', e);
+      throw e;
     }
   },
 
-  async deleteNewsUpdate(id: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) return;
+  // --- Audit Logs (Activity Telemetry) ---
+  async getAuditLogs(): Promise<AuditLog[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      const saved = localStorage.getItem('vibes_audit_logs');
+      return saved ? JSON.parse(saved) : [];
+    }
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('news_updates')
-        .delete()
-        .eq('id', id);
+        .select('*')
+        .eq('category', 'AuditLog')
+        .order('created_at', { ascending: false })
+        .limit(200);
 
       if (error) throw error;
+
+      return (data || []).map(row => {
+        let details = {};
+        try {
+          details = JSON.parse(row.content);
+        } catch (e) {}
+        return {
+          id: row.id,
+          action: row.title,
+          entity_type: (details as any).entity_type || 'system',
+          entity_id: (details as any).entity_id || null,
+          username: row.author,
+          details: details as any,
+          created_at: row.created_at
+        };
+      });
     } catch (e) {
-      console.error('Error deleting news update:', e);
+      console.error('Error fetching audit logs:', e);
+      return [];
+    }
+  },
+
+  async logAuditEvent(
+    action: string,
+    entity_type: string,
+    entity_id: string | null,
+    username: string,
+    details: Record<string, any>
+  ): Promise<void> {
+    const id = `LOG-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const fullDetails = {
+      action,
+      entity_type,
+      entity_id,
+      username,
+      ...details
+    };
+
+    const payload = {
+      id,
+      title: action,
+      content: JSON.stringify(fullDetails),
+      author: username,
+      category: 'AuditLog',
+      created_at: new Date().toISOString()
+    };
+
+    // Save locally
+    const saved = localStorage.getItem('vibes_audit_logs');
+    const list = saved ? JSON.parse(saved) : [];
+    list.unshift({ id, action, entity_type, entity_id, username, details: fullDetails, created_at: payload.created_at });
+    if (list.length > 300) list.pop();
+    localStorage.setItem('vibes_audit_logs', JSON.stringify(list));
+
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      await supabase.from('news_updates').upsert(payload);
+    } catch (e) {
+      console.warn('Failed to commit cloud audit log:', e);
     }
   },
 
@@ -309,10 +401,7 @@ export const supabaseService = {
         .order('created_at', { ascending: false });
 
       if (error) {
-        if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
-          console.warn('Table "authorized_users" does not exist yet.');
-          return [];
-        }
+        if (error.code === 'PGRST116' || error.message.includes('does not exist')) return [];
         throw error;
       }
       return (data || []) as AuthorizedUser[];
@@ -329,7 +418,7 @@ export const supabaseService = {
       const { error } = await supabase
         .from('authorized_users')
         .upsert({
-          id: user.id,
+          id: user.id || `AUTH-${cleanUsername}`,
           username: cleanUsername,
           name: user.name || user.username,
           role: user.role,
@@ -349,7 +438,6 @@ export const supabaseService = {
   async updateUserPassword(username: string, newPassword: string): Promise<void> {
     const cleanUsername = username.toLowerCase().trim();
     if (!isSupabaseConfigured || !supabase) {
-      // Local storage fallback
       const saved = localStorage.getItem('vibes_auth_users');
       if (saved) {
         const users: AuthorizedUser[] = JSON.parse(saved);
@@ -415,7 +503,7 @@ export const supabaseService = {
           username: cleanUsername,
           notes: notes.trim(),
           status: 'Pending',
-          created_at: new Date().toISOString().split('T')[0]
+          created_at: new Date().toISOString()
         });
         localStorage.setItem('vibes_account_requests', JSON.stringify(list));
       }
@@ -455,5 +543,121 @@ export const supabaseService = {
     } catch (e) {
       console.error('Error deleting account request:', e);
     }
+  },
+
+  // --- UNIVERSAL CSV EXPORTERS (AI INGESTION READY) ---
+  downloadCSV(filename: string, csvContent: string) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
+
+  exportEpisodesAndTasksCSV(episodes: Episode[], nodes: Node[]) {
+    const headers = [
+      'Episode ID', 'Episode Title', 'Episode Status', 'Target Release', 'Cast & Crew',
+      'Task ID', 'Task Title', 'Department', 'Task Status', 'Review Status', 'Assignee',
+      'Planned Start', 'Planned End', 'Actual Start', 'Actual End', 'Teacher Notes'
+    ];
+
+    const rows: string[][] = [];
+
+    episodes.forEach(ep => {
+      const epNodes = nodes.filter(n => (n.episode_id || 'EP-01') === ep.id);
+      const crewStr = ep.assigned_crew 
+        ? Object.entries(ep.assigned_crew).map(([dept, members]) => `${dept}: ${members.join(';')}`).join(' | ')
+        : (ep.hosts || '');
+
+      if (epNodes.length === 0) {
+        rows.push([
+          `"${ep.id}"`, `"${ep.title.replace(/"/g, '""')}"`, `"${ep.status}"`, `"${ep.target_release_date}"`, `"${crewStr}"`,
+          '""', '""', '""', '""', '""', '""', '""', '""', '""', '""', '""'
+        ]);
+      } else {
+        epNodes.forEach(n => {
+          rows.push([
+            `"${ep.id}"`, `"${ep.title.replace(/"/g, '""')}"`, `"${ep.status}"`, `"${ep.target_release_date}"`, `"${crewStr}"`,
+            `"${n.id}"`, `"${n.title.replace(/"/g, '""')}"`, `"${n.department}"`, `"${n.status}"`, `"${n.review_status || 'None'}"`,
+            `"${n.assigned_name || n.assigned_to || 'Unassigned'}"`, `"${n.planned_start}"`, `"${n.planned_end}"`,
+            `"${n.actual_start || ''}"`, `"${n.actual_end || ''}"`, `"${(n.review_notes || '').replace(/"/g, '""')}"`
+          ]);
+        });
+      }
+    });
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    this.downloadCSV(`isha_vibes_episodes_and_tasks_${Date.now()}.csv`, csvContent);
+  },
+
+  exportStudentAssessmentsCSV(assessments: SelfAssessment[]) {
+    const headers = [
+      'Submission ID', 'Timestamp', 'Username', 'Student Name', 'Department', 'Episode Target',
+      'Q1_Collaboration', 'Q2_Storytelling', 'Q3_Technical_Craft', 'Q4_Punctuality',
+      'Q5_Feedback_Receptivity', 'Q6_Problem_Solving', 'Q7_Cross_Dept_Support', 'Q8_Leadership',
+      'Average_Score', 'Open_Reflection_Text'
+    ];
+
+    const rows = assessments.map(a => {
+      const qScores = [
+        a.scores?.q1 ?? 0,
+        a.scores?.q2 ?? 0,
+        a.scores?.q3 ?? 0,
+        a.scores?.q4 ?? 0,
+        a.scores?.q5 ?? 0,
+        a.scores?.q6 ?? 0,
+        a.scores?.q7 ?? 0,
+        a.scores?.q8 ?? 0
+      ];
+      const avg = (qScores.reduce((sum, val) => sum + val, 0) / qScores.length).toFixed(2);
+
+      return [
+        `"${a.id}"`, `"${a.submitted_at}"`, `"${a.username}"`, `"${a.student_name.replace(/"/g, '""')}"`,
+        `"${a.department}"`, `"${a.episode_id || 'General'}"`,
+        ...qScores.map(s => String(s)),
+        `"${avg}"`,
+        `"${(a.reflection_notes || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    this.downloadCSV(`isha_vibes_student_assessments_${Date.now()}.csv`, csvContent);
+  },
+
+  exportAuditLogsCSV(logs: AuditLog[]) {
+    const headers = ['Log ID', 'Timestamp', 'Actor Username', 'Action / Event', 'Entity Type', 'Entity ID', 'Full Event Details'];
+    const rows = logs.map(l => [
+      `"${l.id}"`,
+      `"${l.created_at}"`,
+      `"${l.username}"`,
+      `"${l.action}"`,
+      `"${l.entity_type}"`,
+      `"${l.entity_id || ''}"`,
+      `"${JSON.stringify(l.details).replace(/"/g, '""')}"`
+    ].join(','));
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    this.downloadCSV(`isha_vibes_audit_telemetry_${Date.now()}.csv`, csvContent);
+  },
+
+  exportTeamRosterCSV(users: AuthorizedUser[]) {
+    const headers = ['User ID', 'Username', 'Display Name', 'System Role', 'Department', 'Notes', 'Created At', 'Active Status'];
+    const rows = users.map(u => [
+      `"${u.id}"`,
+      `"${u.username}"`,
+      `"${(u.name || '').replace(/"/g, '""')}"`,
+      `"${u.role}"`,
+      `"${u.department}"`,
+      `"${(u.notes || '').replace(/"/g, '""')}"`,
+      `"${u.created_at || ''}"`,
+      `"${u.is_greenlit ? 'Greenlit' : 'Dormant'}"`
+    ].join(','));
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    this.downloadCSV(`isha_vibes_roster_${Date.now()}.csv`, csvContent);
   }
 };

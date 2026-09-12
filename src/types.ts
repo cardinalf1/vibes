@@ -13,28 +13,36 @@ export interface Department {
 export type Status = 'To Do' | 'In Progress' | 'Completed';
 export type Priority = 'Low' | 'Medium' | 'High' | 'Critical';
 export type Role = 'Admin' | 'Teacher' | 'Hosts' | 'Research' | 'Editing' | 'Member' | 'Guest' | string;
+export type ReviewStatus = 'None' | 'Pending Review' | 'Approved' | 'Reverted';
+export type PacingStatus = 'Optimal Velocity' | 'On Track' | 'Pacing Lag' | 'Critical Bottleneck';
 
 export interface Node {
   id: string;
   title: string;
   description: string;
-  department: string; // Department name or id
+  department: string; // Department name
   status: Status;
   priority?: Priority;
   planned_start: string; // YYYY-MM-DD
   planned_end: string;
   actual_start: string | null;
   actual_end: string | null;
-  dependency?: string; // ID of the node it depends on
+  dependency?: string; // ID of prerequisite task
   assigned_to?: string | null; // username
   assigned_name?: string | null;
   created_by?: string | null;
+  // Overhaul review & episode properties
+  episode_id?: string | null;
+  review_status?: ReviewStatus;
+  review_notes?: string | null;
+  submitted_by?: string | null;
+  submission_notes?: string | null;
 }
 
 export type EpisodeStatus = 'Idea' | 'Scripting' | 'Recording' | 'Editing' | 'Review' | 'Published';
 
 export interface Episode {
-  id: string; // e.g. "EP-01", "VIBE-01"
+  id: string; // e.g. "EP-01", "EP-02"
   title: string;
   target_release_date: string; // YYYY-MM-DD
   status: EpisodeStatus;
@@ -47,36 +55,29 @@ export interface Episode {
   department_notes?: string;
   tags?: string[];
   created_at?: string;
+  assigned_crew?: Record<string, string[]>; // { [deptName]: ['username1', 'username2'] }
+  pacing_status?: PacingStatus;
 }
 
-export type ExpenditureCategory = 
-  | 'Equipment' 
-  | 'Studio & Acoustic' 
-  | 'Software & Subscriptions' 
-  | 'Marketing & Branding' 
-  | 'Hosting & Distribution' 
-  | 'Events & Guests';
-
-export type ExpenditureStatus = 'Pending' | 'Pledged' | 'Purchased';
-
-export interface ExpenditureItem {
+export interface SelfAssessment {
   id: string;
-  item_name: string;
-  cost: number;
-  category: ExpenditureCategory;
-  needed_by: string; // YYYY-MM-DD
-  status: ExpenditureStatus;
-  pledged_by_username?: string | null;
-  pledged_by_name?: string | null;
+  username: string;
+  student_name: string;
+  department: string;
+  episode_id?: string | null;
+  scores: Record<string, number>; // questionId -> value (-3 to +3: -3 Strongly Disagree, +3 Strongly Agree)
+  reflection_notes: string;
+  submitted_at: string;
 }
 
-export interface NewsUpdate {
+export interface AuditLog {
   id: string;
-  title: string;
-  content: string;
-  created_at: string; // YYYY-MM-DD or ISO
-  author: string;
-  category?: 'Announcement' | 'Episode Drop' | 'Studio Update' | 'Milestone';
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  username: string;
+  details: Record<string, any>;
+  created_at: string;
 }
 
 export interface AuthorizedUser {
@@ -101,7 +102,57 @@ export interface AccountRequest {
   created_at?: string;
 }
 
-// Built-in initial departments for Isha Vibes
+// 16Personalities-style 7-Point Likert Question Set for Student Podcasters
+export interface LikertQuestion {
+  id: string;
+  category: string;
+  prompt: string;
+}
+
+export const ASSESSMENT_QUESTIONS: LikertQuestion[] = [
+  {
+    id: 'q1',
+    category: 'Collaboration & Communication',
+    prompt: 'You actively communicate milestone progress and blockers with your department peers before deadlines.'
+  },
+  {
+    id: 'q2',
+    category: 'Creative Storytelling & Ideation',
+    prompt: 'You consistently contribute original interview angles, narrative hooks, or script refinements.'
+  },
+  {
+    id: 'q3',
+    category: 'Technical Craft & Post-Production',
+    prompt: 'You take pride in rigorous audio cleanliness, sound balance, and high technical production quality.'
+  },
+  {
+    id: 'q4',
+    category: 'Punctuality & Reliability',
+    prompt: 'You deliver your assigned production deliverables ahead of schedule without requiring reminders.'
+  },
+  {
+    id: 'q5',
+    category: 'Feedback & Receptivity',
+    prompt: 'When faculty or department leads suggest revisions, you incorporate feedback calmly and constructively.'
+  },
+  {
+    id: 'q6',
+    category: 'Problem Solving & Initiative',
+    prompt: 'When unexpected studio issues arise (technical glitches, guest delays), you step up with pragmatic solutions.'
+  },
+  {
+    id: 'q7',
+    category: 'Cross-Department Support',
+    prompt: 'You regularly assist students outside your immediate department (e.g. hosts helping research or editing).'
+  },
+  {
+    id: 'q8',
+    category: 'Studio Leadership & Team Spirit',
+    prompt: 'You foster an encouraging, high-energy, and inclusive studio atmosphere for all student creators.'
+  }
+];
+
+// Initial departments
 export const initialDepartments: Department[] = [
   {
     id: 'dept-teacher',

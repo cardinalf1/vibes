@@ -1,6 +1,6 @@
 import { 
-  LayoutDashboard, Radio, Settings, LogOut, Users, ListTodo, 
-  ShieldCheck, Wallet, Mic, Key
+  Radio, Settings, LogOut, Users, Award, 
+  ShieldCheck, Activity, Key, Mic
 } from 'lucide-react';
 import { useAuth } from './AuthGate';
 
@@ -12,6 +12,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onOpenChangePassword: () => void;
   isSupabaseActive?: boolean;
+  pendingReviewCount?: number;
 }
 
 export function Header({ 
@@ -21,27 +22,28 @@ export function Header({
   onModuleChange, 
   onOpenSettings,
   onOpenChangePassword,
-  isSupabaseActive 
+  isSupabaseActive,
+  pendingReviewCount = 0
 }: HeaderProps) {
   const { user, signOut, role: authRole, name: displayName, username } = useAuth();
-
   const isTeacherOrAdmin = authRole === 'Admin' || authRole === 'Teacher';
 
-  // Navigation Items for Isha Vibes
-  const navItems = [
-    { name: 'Command Center', icon: LayoutDashboard },
+  // Navigation Items by Role
+  const navItems = isTeacherOrAdmin ? [
     { name: 'Episodes', icon: Radio },
+    { name: 'Review Queue', icon: ShieldCheck, badge: pendingReviewCount },
+    { name: 'Self-Assessment', icon: Award },
+    { name: 'Assessment Reports', icon: Award },
     { name: 'Departments & Roster', icon: Users },
-    { name: 'To-Dos', icon: ListTodo },
-    { name: 'Budget & Studio', icon: Wallet },
+    { name: 'Telemetry & Logs', icon: Activity },
+    { name: 'Access Control', icon: Key },
+  ] : [
+    { name: 'Episodes', icon: Radio },
+    { name: 'Self-Assessment', icon: Award },
   ];
 
-  if (isTeacherOrAdmin) {
-    navItems.push({ name: 'Access Control', icon: ShieldCheck });
-  }
-
   return (
-    <header className="h-16 border-b border-[#222b3d] flex items-center justify-between px-6 shrink-0 bg-[#0e121a]/95 backdrop-blur-md z-20 font-sans">
+    <header className="h-16 border-b border-[#222b3d] flex items-center justify-between px-4 sm:px-6 shrink-0 bg-[#0e121a]/95 backdrop-blur-md z-20 font-sans">
       <div className="flex items-center gap-6">
         {/* Brand & Project Indicator */}
         <div className="flex items-center gap-3">
@@ -62,7 +64,7 @@ export function Header({
             </div>
           </div>
 
-          <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full border uppercase tracking-wider font-semibold ${
+          <span className={`hidden sm:inline-flex text-[9px] font-mono px-2 py-0.5 rounded-full border uppercase tracking-wider font-semibold ${
             isSupabaseActive 
               ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' 
               : 'bg-[#181e2b] text-slate-400 border-[#222b3d]'
@@ -76,25 +78,32 @@ export function Header({
           {navItems.map((item) => {
             const isActive = activeModule === item.name;
             const Icon = item.icon;
+            const badgeCount = (item as any).badge || 0;
+
             return (
               <button
                 key={item.name}
                 onClick={() => onModuleChange(item.name)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer relative ${
                   isActive 
-                    ? 'bg-[#3e6688] text-white shadow-md shadow-[#3e6688]/20' 
+                    ? 'bg-[#3e6688] text-white shadow-md shadow-[#3e6688]/20 font-semibold' 
                     : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{item.name}</span>
+                {badgeCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-[#f5c358] text-black text-[9px] font-bold flex items-center justify-center font-mono">
+                    {badgeCount}
+                  </span>
+                )}
               </button>
             );
           })}
         </nav>
       </div>
 
-      {/* Right Controls: User Pill, Password Change, Settings, Logout */}
+      {/* Right Controls: User Profile, Settings, Logout */}
       <div className="flex items-center gap-3">
         {user && (
           <div className="flex items-center gap-2">
@@ -112,10 +121,10 @@ export function Header({
               </div>
             </div>
 
-            {/* Self-service password change button */}
+            {/* Change Password */}
             <button
               onClick={onOpenChangePassword}
-              title="Change My Password"
+              title="Change Password"
               className="w-8 h-8 rounded-xl bg-[#121620] hover:bg-[#181e2b] text-slate-400 hover:text-[#f5c358] border border-[#222b3d] flex items-center justify-center transition-colors cursor-pointer"
             >
               <Key className="w-3.5 h-3.5" />
