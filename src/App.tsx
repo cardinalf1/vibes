@@ -675,7 +675,7 @@ export default function App() {
               departments={departments}
               users={authorizedUsers}
               onBack={() => setSelectedEpisode(null)}
-              onUpdateEpisode={handleEditEpisode}
+              onUpdateEpisode={(ep) => handleEditEpisode(ep.id, ep)}
               onCreateTask={handleCreateNode}
               onUpdateTaskStatus={handleUpdateTaskStatus}
               onSubmitTaskForReview={handleSubmitTaskForReview}

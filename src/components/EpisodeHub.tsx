@@ -286,7 +286,7 @@ export function EpisodeHub({
                       </span>
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                        {departments.slice(0, 5).map(dept => {
+                        {departments.filter(d => d.name.toLowerCase() !== 'admin').slice(0, 5).map(dept => {
                           const members = crew[dept.name] || [];
 
                           return (

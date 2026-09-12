@@ -64,9 +64,12 @@ export function EpisodeDetailView({
   const [newTaskEnd, setNewTaskEnd] = useState(new Date().toISOString().split('T')[0]);
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
 
+  // Filter production departments (exclude Admin role)
+  const productionDepts = departments.filter(d => d.name.toLowerCase() !== 'admin');
+
   // Add crew modal state
   const [isAddingCrew, setIsAddingCrew] = useState(false);
-  const [selectedCrewDept, setSelectedCrewDept] = useState<string>(departments[0]?.name || 'Hosts');
+  const [selectedCrewDept, setSelectedCrewDept] = useState<string>(productionDepts[0]?.name || 'Hosts');
   const [selectedCrewUsername, setSelectedCrewUsername] = useState<string>('');
 
   // Active view tab inside episode
@@ -100,13 +103,18 @@ export function EpisodeDetailView({
   // Current Episode Assigned Crew Map
   const crewMap: Record<string, string[]> = episode.assigned_crew || {};
 
-  const handleAddCrewMember = () => {
-    if (!selectedCrewUsername) return;
-    const currentList = crewMap[selectedCrewDept] || [];
-    if (!currentList.includes(selectedCrewUsername)) {
+  const handleAddCrewMember = (deptToAssign?: string, unameToAssign?: string) => {
+    const targetDept = deptToAssign || selectedCrewDept;
+    const targetUname = unameToAssign || selectedCrewUsername;
+    if (!targetUname) {
+      alert('Please choose a student to assign to this role.');
+      return;
+    }
+    const currentList = crewMap[targetDept] || [];
+    if (!currentList.includes(targetUname)) {
       const updatedCrew = {
         ...crewMap,
-        [selectedCrewDept]: [...currentList, selectedCrewUsername]
+        [targetDept]: [...currentList, targetUname]
       };
       onUpdateEpisode({
         ...episode,
@@ -254,12 +262,12 @@ export function EpisodeDetailView({
           </div>
 
           <div className="bg-[#121620] border border-[#222b3d] p-4 rounded-2xl">
-            <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">Master Audio</span>
+            <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">Length</span>
             <span className="text-base font-bold text-white block mt-1">
-              {episode.runtime_minutes ? `${episode.runtime_minutes} Mins` : 'Recording In Prep'}
+              {episode.runtime_minutes ? `${episode.runtime_minutes} Mins` : '45 Mins'}
             </span>
             <span className="text-[11px] text-slate-400 mt-1 block">
-              {episode.audio_url ? 'Audio link available' : 'Awaiting audio master upload'}
+              {episode.audio_url ? 'Master audio uploaded' : 'Target studio duration'}
             </span>
           </div>
         </div>
@@ -269,31 +277,65 @@ export function EpisodeDetailView({
           <div className="flex justify-between items-center flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-[#3e6688]" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-                Assigned Cast & Production Crew
-              </h3>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                  Assigned Cast & Production Crew
+                </h3>
+                <span className="text-[11px] text-slate-400">
+                  {isTeacherOrAdmin ? 'Click on any role card to assign students to that department' : 'Current department allocations'}
+                </span>
+              </div>
             </div>
 
             {isTeacherOrAdmin && (
               <button
-                onClick={() => setIsAddingCrew(true)}
-                className="text-[11px] font-semibold text-[#f5c358] hover:text-white flex items-center gap-1 bg-[#181e2b] border border-[#222b3d] px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
+                onClick={() => {
+                  setSelectedCrewDept(productionDepts[0]?.name || 'Hosts');
+                  setSelectedCrewUsername('');
+                  setIsAddingCrew(true);
+                }}
+                className="text-[11px] font-semibold text-[#f5c358] hover:text-white flex items-center gap-1 bg-[#181e2b] hover:bg-[#222b3d] border border-[#222b3d] px-3 py-1.5 rounded-lg cursor-pointer transition-colors shadow-sm"
               >
-                <UserPlus className="w-3 h-3" />
+                <UserPlus className="w-3.5 h-3.5" />
                 <span>Assign Staff Member</span>
               </button>
             )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {departments.map(dept => {
+            {productionDepts.map(dept => {
               const members = crewMap[dept.name] || [];
 
               return (
-                <div key={dept.id} className="bg-[#0b0e14] border border-[#222b3d] rounded-xl p-3 space-y-2">
+                <div 
+                  key={dept.id} 
+                  onClick={() => {
+                    if (isTeacherOrAdmin) {
+                      setSelectedCrewDept(dept.name);
+                      setSelectedCrewUsername('');
+                      setIsAddingCrew(true);
+                    }
+                  }}
+                  className={`bg-[#0b0e14] border rounded-xl p-3 space-y-2 transition-all group ${
+                    isTeacherOrAdmin 
+                      ? 'border-[#222b3d] hover:border-[#3e6688] hover:bg-[#121620] cursor-pointer shadow-sm hover:shadow-md' 
+                      : 'border-[#222b3d]'
+                  }`}
+                >
                   <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-slate-300 font-sans">{dept.name}</span>
-                    <span className="text-[10px] font-mono text-slate-500">{members.length}</span>
+                    <span className="font-semibold text-slate-300 group-hover:text-white font-sans flex items-center gap-1.5">
+                      {dept.name}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-slate-400 bg-[#181e2b] px-1.5 py-0.5 rounded border border-[#222b3d]">
+                        {members.length}
+                      </span>
+                      {isTeacherOrAdmin && (
+                        <span className="text-[10px] text-[#f5c358] group-hover:underline font-mono">
+                          + Assign
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 min-h-[32px]">
@@ -304,12 +346,17 @@ export function EpisodeDetailView({
                         <span
                           key={uname}
                           className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#181e2b] border border-[#222b3d] text-slate-200"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <span>@{uname}</span>
                           {isTeacherOrAdmin && (
                             <button
-                              onClick={() => handleRemoveCrewMember(dept.name, uname)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveCrewMember(dept.name, uname);
+                              }}
                               className="text-slate-500 hover:text-red-400 p-0.5"
+                              title="Remove from role"
                             >
                               ×
                             </button>
@@ -723,35 +770,76 @@ export function EpisodeDetailView({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#121620] border border-[#222b3d] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6 space-y-4"
+              className="bg-[#121620] border border-[#222b3d] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4"
             >
               <div>
                 <h3 className="text-sm font-bold text-white font-sans uppercase">
                   Assign Staff to {episode.id}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Select department and student to assign</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Select a role and student to assign to this episode
+                </p>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">Department</label>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Production Role / Department</label>
                   <select
                     value={selectedCrewDept}
                     onChange={(e) => setSelectedCrewDept(e.target.value)}
-                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
                   >
-                    {departments.map(d => (
+                    {productionDepts.map(d => (
                       <option key={d.id} value={d.name}>{d.name}</option>
                     ))}
                   </select>
                 </div>
 
+                {/* Quick-Pick Recommended Students for this role */}
                 <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">Student</label>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                    Quick Assign (Students in {selectedCrewDept})
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-[#0b0e14] border border-[#222b3d] rounded-xl">
+                    {users
+                      .filter(u => u.role === 'Member')
+                      .sort((a, b) => (a.department === selectedCrewDept ? -1 : 1))
+                      .map(u => {
+                        const isMatch = u.department?.toLowerCase() === selectedCrewDept.toLowerCase();
+                        const isAlreadyInRole = (crewMap[selectedCrewDept] || []).includes(u.username);
+
+                        return (
+                          <button
+                            key={u.username}
+                            type="button"
+                            disabled={isAlreadyInRole}
+                            onClick={() => handleAddCrewMember(selectedCrewDept, u.username)}
+                            className={`text-[11px] font-mono px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                              isAlreadyInRole
+                                ? 'bg-[#181e2b] text-slate-600 border-[#222b3d] cursor-not-allowed opacity-50'
+                                : isMatch
+                                ? 'bg-[#3e6688]/20 hover:bg-[#3e6688] text-white border-[#3e6688]/60 shadow-sm'
+                                : 'bg-[#181e2b] hover:bg-[#222b3d] text-slate-300 border-[#222b3d]'
+                            }`}
+                          >
+                            <span>{u.name || `@${u.username}`}</span>
+                            {isAlreadyInRole ? (
+                              <span className="text-[9px] text-slate-500 font-sans">(Added)</span>
+                            ) : (
+                              <span className="text-[9px] text-[#f5c358] font-sans">+ Assign</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Or Choose from Full Roster</label>
                   <select
                     value={selectedCrewUsername}
                     onChange={(e) => setSelectedCrewUsername(e.target.value)}
-                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                    className="w-full bg-[#0b0e14] border border-[#222b3d] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#3e6688]"
                   >
                     <option value="">-- Choose Member --</option>
                     {users.map(u => (
@@ -767,16 +855,16 @@ export function EpisodeDetailView({
                 <button
                   type="button"
                   onClick={() => setIsAddingCrew(false)}
-                  className="px-4 py-2 rounded-xl text-xs text-slate-400 bg-[#181e2b] border border-[#222b3d]"
+                  className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white bg-[#181e2b] border border-[#222b3d]"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  onClick={handleAddCrewMember}
+                  onClick={() => handleAddCrewMember(selectedCrewDept, selectedCrewUsername)}
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-[#3e6688] hover:bg-[#4d7ca6] shadow-md cursor-pointer"
                 >
-                  Assign Member
+                  Assign to Role
                 </button>
               </div>
             </motion.div>
