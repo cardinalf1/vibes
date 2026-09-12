@@ -32,7 +32,6 @@ export function Header({
   const navItems = isTeacherOrAdmin ? [
     { name: 'Episodes', icon: Radio },
     { name: 'Review Queue', icon: ShieldCheck, badge: pendingReviewCount },
-    { name: 'Self-Assessment', icon: Award },
     { name: 'Assessment Reports', icon: Award },
     { name: 'Departments & Roster', icon: Users },
     { name: 'Telemetry & Logs', icon: Activity },

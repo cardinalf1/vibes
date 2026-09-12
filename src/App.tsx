@@ -698,8 +698,8 @@ export default function App() {
           )
         )}
 
-        {/* 2. Self-Assessment (16personalities-Style Quiz) */}
-        {activeModule === 'Self-Assessment' && (
+        {/* 2. Self-Assessment (16personalities-Style Student Form) */}
+        {activeModule === 'Self-Assessment' && !isTeacherOrAdmin && (
           <SelfAssessment
             episodes={episodes}
             pastAssessments={selfAssessments}
@@ -718,8 +718,8 @@ export default function App() {
           />
         )}
 
-        {/* 4. Assessment Reports (Teacher View) */}
-        {activeModule === 'Assessment Reports' && isTeacherOrAdmin && (
+        {/* 4. Assessment Reports (Teacher View of Student Responses) */}
+        {(activeModule === 'Assessment Reports' || (activeModule === 'Self-Assessment' && isTeacherOrAdmin)) && isTeacherOrAdmin && (
           <AssessmentReports
             assessments={selfAssessments}
             episodes={episodes}

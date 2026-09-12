@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  ArrowLeft, Radio, Calendar, Users, CheckCircle2, Clock, 
+  ArrowLeft, Radio, Calendar, Users, User, CheckCircle2, Clock, 
   AlertCircle, RotateCcw, Plus, UserPlus, Trash2, Edit2, Play, 
   ExternalLink, Mic, Search, Music, Shield, Sparkles, Send, GripVertical, Check 
 } from 'lucide-react';
