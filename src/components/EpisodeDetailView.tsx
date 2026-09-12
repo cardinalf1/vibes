@@ -392,22 +392,54 @@ export function EpisodeDetailView({
           <div
             onDragOver={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               e.dataTransfer.dropEffect = 'move';
               if (isTeacherOrAdmin) {
                 setIsDragOverStaffBay(true);
               }
             }}
-            onDragLeave={() => setIsDragOverStaffBay(false)}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (isTeacherOrAdmin) {
+                setIsDragOverStaffBay(true);
+              }
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget === e.target) {
+                setIsDragOverStaffBay(false);
+              }
+            }}
             onDrop={(e) => {
               e.preventDefault();
-              const uname = draggedUsername || e.dataTransfer.getData('text/plain');
-              if (uname && sourceTaskId) {
-                onAssignStudentToTask(sourceTaskId, uname, 'remove');
+              e.stopPropagation();
+              let uname = draggedUsername;
+              let fromTaskId = sourceTaskId;
+
+              try {
+                const raw = e.dataTransfer.getData('application/json');
+                if (raw) {
+                  const parsed = JSON.parse(raw);
+                  if (parsed.username) uname = parsed.username;
+                  if (parsed.sourceTaskId) fromTaskId = parsed.sourceTaskId;
+                }
+              } catch (err) {}
+
+              if (!uname) uname = e.dataTransfer.getData('text/plain');
+              if (!fromTaskId && (window as any).__vibes_active_drag) {
+                fromTaskId = (window as any).__vibes_active_drag.sourceTaskId;
+                if (!uname) uname = (window as any).__vibes_active_drag.username;
               }
+
+              if (uname && fromTaskId) {
+                onAssignStudentToTask(fromTaskId, uname, 'remove');
+              }
+
               setDraggedUsername(null);
               setSourceTaskId(null);
               setDragOverTaskId(null);
               setIsDragOverStaffBay(false);
+              (window as any).__vibes_active_drag = null;
             }}
             className={`border rounded-2xl p-4 space-y-2 shadow-lg transition-all ${
               isDragOverStaffBay
@@ -449,15 +481,18 @@ export function EpisodeDetailView({
                     draggable={isTeacherOrAdmin}
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', student.username);
+                      e.dataTransfer.setData('application/json', JSON.stringify({ username: student.username, sourceTaskId: null }));
                       e.dataTransfer.effectAllowed = 'move';
                       setDraggedUsername(student.username);
                       setSourceTaskId(null);
+                      (window as any).__vibes_active_drag = { username: student.username, sourceTaskId: null };
                     }}
                     onDragEnd={() => {
                       setDraggedUsername(null);
                       setSourceTaskId(null);
                       setDragOverTaskId(null);
                       setIsDragOverStaffBay(false);
+                      (window as any).__vibes_active_drag = null;
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 cursor-grab active:cursor-grabbing shadow-sm hover:border-[#3e6688] transition-all select-none"
                   >
@@ -508,29 +543,54 @@ export function EpisodeDetailView({
                       key={task.id}
                       onDragOver={(e) => {
                         e.preventDefault();
+                        e.stopPropagation();
                         e.dataTransfer.dropEffect = 'move';
                         if (isTeacherOrAdmin) setDragOverTaskId(task.id);
                       }}
-                      onDragLeave={() => setDragOverTaskId(null)}
+                      onDragLeave={(e) => {
+                        if (e.currentTarget === e.target) {
+                          setDragOverTaskId(null);
+                        }
+                      }}
                       onDrop={(e) => {
                         e.preventDefault();
-                        const uname = draggedUsername || e.dataTransfer.getData('text/plain');
+                        e.stopPropagation();
+                        let uname = draggedUsername;
+                        let fromTaskId = sourceTaskId;
+
+                        try {
+                          const raw = e.dataTransfer.getData('application/json');
+                          if (raw) {
+                            const parsed = JSON.parse(raw);
+                            if (parsed.username) uname = parsed.username;
+                            if (parsed.sourceTaskId) fromTaskId = parsed.sourceTaskId;
+                          }
+                        } catch (err) {}
+
+                        if (!uname) uname = e.dataTransfer.getData('text/plain');
+                        if (!fromTaskId && (window as any).__vibes_active_drag) {
+                          fromTaskId = (window as any).__vibes_active_drag.sourceTaskId;
+                          if (!uname) uname = (window as any).__vibes_active_drag.username;
+                        }
+
                         if (uname) {
-                          if (sourceTaskId && sourceTaskId !== task.id) {
+                          if (fromTaskId && fromTaskId !== task.id) {
                             if (onMoveStudentBetweenTasks) {
-                              onMoveStudentBetweenTasks(sourceTaskId, task.id, uname);
+                              onMoveStudentBetweenTasks(fromTaskId, task.id, uname);
                             } else {
-                              onAssignStudentToTask(sourceTaskId, uname, 'remove');
+                              onAssignStudentToTask(fromTaskId, uname, 'remove');
                               onAssignStudentToTask(task.id, uname, 'add');
                             }
-                          } else if (!sourceTaskId) {
+                          } else if (!fromTaskId) {
                             onAssignStudentToTask(task.id, uname, 'add');
                           }
                         }
+
                         setDraggedUsername(null);
                         setSourceTaskId(null);
                         setDragOverTaskId(null);
                         setIsDragOverStaffBay(false);
+                        (window as any).__vibes_active_drag = null;
                       }}
                       className={`bg-[#121620] border rounded-2xl p-5 shadow-lg space-y-4 transition-all ${
                         isDragTarget 
@@ -609,15 +669,18 @@ export function EpisodeDetailView({
                                   onDragStart={(e) => {
                                     if (!isTeacherOrAdmin) return;
                                     e.dataTransfer.setData('text/plain', uname);
+                                    e.dataTransfer.setData('application/json', JSON.stringify({ username: uname, sourceTaskId: task.id }));
                                     e.dataTransfer.effectAllowed = 'move';
                                     setDraggedUsername(uname);
                                     setSourceTaskId(task.id);
+                                    (window as any).__vibes_active_drag = { username: uname, sourceTaskId: task.id };
                                   }}
                                   onDragEnd={() => {
                                     setDraggedUsername(null);
                                     setSourceTaskId(null);
                                     setDragOverTaskId(null);
                                     setIsDragOverStaffBay(false);
+                                    (window as any).__vibes_active_drag = null;
                                   }}
                                   className={`flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 transition-all select-none shadow-sm ${
                                     isTeacherOrAdmin
