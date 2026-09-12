@@ -392,15 +392,17 @@ export function EpisodeDetailView({
           <div
             onDragOver={(e) => {
               e.preventDefault();
-              if (isTeacherOrAdmin && draggedUsername) {
+              e.dataTransfer.dropEffect = 'move';
+              if (isTeacherOrAdmin) {
                 setIsDragOverStaffBay(true);
               }
             }}
             onDragLeave={() => setIsDragOverStaffBay(false)}
             onDrop={(e) => {
               e.preventDefault();
-              if (draggedUsername && sourceTaskId) {
-                onAssignStudentToTask(sourceTaskId, draggedUsername, 'remove');
+              const uname = draggedUsername || e.dataTransfer.getData('text/plain');
+              if (uname && sourceTaskId) {
+                onAssignStudentToTask(sourceTaskId, uname, 'remove');
               }
               setDraggedUsername(null);
               setSourceTaskId(null);
@@ -444,8 +446,10 @@ export function EpisodeDetailView({
                 availableStudents.map(student => (
                   <div
                     key={student.username}
-                    draggable
-                    onDragStart={() => {
+                    draggable={isTeacherOrAdmin}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', student.username);
+                      e.dataTransfer.effectAllowed = 'move';
                       setDraggedUsername(student.username);
                       setSourceTaskId(null);
                     }}
@@ -455,9 +459,9 @@ export function EpisodeDetailView({
                       setDragOverTaskId(null);
                       setIsDragOverStaffBay(false);
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 cursor-grab active:cursor-grabbing shadow-sm hover:border-[#3e6688] transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 cursor-grab active:cursor-grabbing shadow-sm hover:border-[#3e6688] transition-all select-none"
                   >
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                     <span className="font-semibold">{student.name || `@${student.username}`}</span>
                     <span className="text-[10px] font-mono text-slate-400">({student.department || 'General'})</span>
                   </div>
@@ -504,27 +508,29 @@ export function EpisodeDetailView({
                       key={task.id}
                       onDragOver={(e) => {
                         e.preventDefault();
-                        if (isTeacherOrAdmin && draggedUsername) setDragOverTaskId(task.id);
+                        e.dataTransfer.dropEffect = 'move';
+                        if (isTeacherOrAdmin) setDragOverTaskId(task.id);
                       }}
                       onDragLeave={() => setDragOverTaskId(null)}
                       onDrop={(e) => {
                         e.preventDefault();
-                        if (draggedUsername) {
+                        const uname = draggedUsername || e.dataTransfer.getData('text/plain');
+                        if (uname) {
                           if (sourceTaskId && sourceTaskId !== task.id) {
                             if (onMoveStudentBetweenTasks) {
-                              onMoveStudentBetweenTasks(sourceTaskId, task.id, draggedUsername);
+                              onMoveStudentBetweenTasks(sourceTaskId, task.id, uname);
                             } else {
-                              onAssignStudentToTask(sourceTaskId, draggedUsername, 'remove');
-                              onAssignStudentToTask(task.id, draggedUsername, 'add');
+                              onAssignStudentToTask(sourceTaskId, uname, 'remove');
+                              onAssignStudentToTask(task.id, uname, 'add');
                             }
                           } else if (!sourceTaskId) {
-                            onAssignStudentToTask(task.id, draggedUsername, 'add');
+                            onAssignStudentToTask(task.id, uname, 'add');
                           }
-                          setDraggedUsername(null);
-                          setSourceTaskId(null);
-                          setDragOverTaskId(null);
-                          setIsDragOverStaffBay(false);
                         }
+                        setDraggedUsername(null);
+                        setSourceTaskId(null);
+                        setDragOverTaskId(null);
+                        setIsDragOverStaffBay(false);
                       }}
                       className={`bg-[#121620] border rounded-2xl p-5 shadow-lg space-y-4 transition-all ${
                         isDragTarget 
@@ -562,21 +568,48 @@ export function EpisodeDetailView({
                           </p>
                         </div>
 
-                        {/* Assignees & Dates */}
-                        <div className="flex flex-col sm:items-end gap-1.5 text-xs">
-                          <div className="flex items-center gap-1.5 flex-wrap sm:justify-end font-mono text-slate-300">
-                            <Users className="w-3.5 h-3.5 text-[#3e6688] shrink-0" />
-                            <span className="text-slate-400 text-[11px]">Assignees:</span>
-                            {taskAssignees.length === 0 ? (
-                              <span className="text-slate-600 italic text-[11px]">Unassigned</span>
-                            ) : (
-                              taskAssignees.map(uname => (
-                                <span
+                        {/* Dates */}
+                        <div className="flex items-center gap-2 text-xs font-mono text-slate-400 bg-[#0b0e14] border border-[#222b3d] px-3 py-1.5 rounded-xl">
+                          <Calendar className="w-3.5 h-3.5 text-[#3e6688]" />
+                          <span>{task.planned_start} ➔ {task.planned_end}</span>
+                        </div>
+                      </div>
+
+                      {/* Assigned Crew Members - Drag and Drop Uniform Pills */}
+                      <div className="space-y-1.5 pt-2 border-t border-[#222b3d]/40">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-slate-400 font-mono text-[11px] font-semibold uppercase tracking-wider">
+                            <Users className="w-3.5 h-3.5 text-[#3e6688]" />
+                            <span>Assigned Crew ({taskAssignees.length}):</span>
+                          </div>
+                          {isTeacherOrAdmin && (
+                            <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
+                              Drag pill to another task or Staff Bay to unassign
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 min-h-[38px] p-2 bg-[#0b0e14] border border-[#222b3d] rounded-xl">
+                          {taskAssignees.length === 0 ? (
+                            <span className="text-xs text-slate-500 italic py-1 px-1">
+                              No students assigned. Drag student pills from the Staff Bay or another task here.
+                            </span>
+                          ) : (
+                            taskAssignees.map(uname => {
+                              const student = users.find(u => u.username === uname) || {
+                                username: uname,
+                                name: uname,
+                                department: task.department
+                              };
+
+                              return (
+                                <div
                                   key={uname}
                                   draggable={isTeacherOrAdmin}
                                   onDragStart={(e) => {
                                     if (!isTeacherOrAdmin) return;
-                                    e.stopPropagation();
+                                    e.dataTransfer.setData('text/plain', uname);
+                                    e.dataTransfer.effectAllowed = 'move';
                                     setDraggedUsername(uname);
                                     setSourceTaskId(task.id);
                                   }}
@@ -586,56 +619,40 @@ export function EpisodeDetailView({
                                     setDragOverTaskId(null);
                                     setIsDragOverStaffBay(false);
                                   }}
-                                  className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#0b0e14] border border-[#222b3d] text-slate-200 transition-all ${
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 bg-[#181e2b] hover:bg-[#20283a] border border-[#2d384e] rounded-xl text-xs text-slate-200 transition-all select-none shadow-sm ${
                                     isTeacherOrAdmin
-                                      ? 'cursor-grab active:cursor-grabbing hover:border-[#3e6688] hover:bg-[#181e2b] select-none'
+                                      ? 'cursor-grab active:cursor-grabbing hover:border-[#3e6688]'
                                       : ''
                                   }`}
-                                  title={isTeacherOrAdmin ? `Drag @${uname} to another task or back to Staff Bay` : `@${uname}`}
+                                  title={isTeacherOrAdmin ? `Drag @${uname} to another task or drag to Staff Bay to unassign` : student.name}
                                 >
-                                  {isTeacherOrAdmin && (
-                                    <GripVertical className="w-2.5 h-2.5 text-slate-500 shrink-0" />
-                                  )}
-                                  <span>@{uname}</span>
-                                  {isTeacherOrAdmin && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onAssignStudentToTask(task.id, uname, 'remove');
-                                      }}
-                                      className="text-slate-500 hover:text-red-400 p-0.5 ml-0.5 cursor-pointer leading-none"
-                                      title={`Remove @${uname} from this task`}
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </span>
-                              ))
-                            )}
+                                  <div className="w-2 h-2 rounded-full bg-[#3e6688] shrink-0" />
+                                  <span className="font-semibold">{student.name || `@${uname}`}</span>
+                                  <span className="text-[10px] font-mono text-slate-400">({student.department || task.department})</span>
+                                </div>
+                              );
+                            })
+                          )}
 
-                            {isTeacherOrAdmin && (
-                              <select
-                                value=""
-                                onChange={(e) => {
-                                  if (e.target.value) onAssignStudentToTask(task.id, e.target.value, 'add');
-                                }}
-                                className="bg-[#0b0e14] border border-[#222b3d] hover:border-[#3e6688] rounded-lg px-2 py-0.5 text-[11px] text-[#f5c358] outline-none cursor-pointer"
-                                title="Add another crew member to this task"
-                              >
-                                <option value="">+ Add Person</option>
-                                {episodeCrewMembers
-                                  .filter(u => !taskAssignees.includes(u.username))
-                                  .map(u => (
-                                    <option key={u.username} value={u.username}>
-                                      @{u.username} ({u.department})
-                                    </option>
-                                  ))}
-                              </select>
-                            )}
-                          </div>
-                          <span className="text-[11px] font-mono text-slate-400">
-                            {task.planned_start} ➔ {task.planned_end}
-                          </span>
+                          {isTeacherOrAdmin && (
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) onAssignStudentToTask(task.id, e.target.value, 'add');
+                              }}
+                              className="bg-[#121620] border border-[#222b3d] hover:border-[#3e6688] rounded-xl px-2.5 py-1 text-xs text-[#f5c358] outline-none cursor-pointer ml-auto"
+                              title="Quick add person from episode crew"
+                            >
+                              <option value="">+ Add Person</option>
+                              {episodeCrewMembers
+                                .filter(u => !taskAssignees.includes(u.username))
+                                .map(u => (
+                                  <option key={u.username} value={u.username}>
+                                    {u.name || `@${u.username}`} ({u.department})
+                                  </option>
+                                ))}
+                            </select>
+                          )}
                         </div>
                       </div>
 
